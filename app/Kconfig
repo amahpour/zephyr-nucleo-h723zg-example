@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "ADC Sampler Application"
+
+menu "Target Selection"
+
+config APP_TARGET_SIM
+    bool "Simulator target (QEMU with adc-emul)"
+    help
+      Build for QEMU x86 simulator with ADC emulation.
+      Enables injection commands for testing.
+
+config APP_TARGET_HW
+    bool "Hardware target (real ADC)"
+    help
+      Build for real hardware with physical ADC.
+      No injection commands are compiled.
+
+endmenu
+
+menu "Application Configuration"
+
+config APP_NUM_CH
+    int "Number of ADC channels"
+    default 4
+    range 1 16
+    help
+      Number of ADC channels to sample.
+
+config APP_SAMPLE_PERIOD_MS
+    int "Sampling period in milliseconds"
+    default 100
+    range 10 10000
+    help
+      How often to sample all ADC channels.
+
+endmenu
+
+source "Kconfig.zephyr"
+

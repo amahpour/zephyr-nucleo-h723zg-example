@@ -1,0 +1,16 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Devicetree overlay for QEMU x86 - ADC Emulator
+ */
+
+/ {
+    adc0: adc_emul {
+        compatible = "zephyr,adc-emul";
+        status = "okay";
+        #io-channel-cells = <1>;
+        nchannels = <4>;
+        ref-internal-mv = <3300>;
+    };
+};
+
