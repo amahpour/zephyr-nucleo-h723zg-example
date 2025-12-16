@@ -37,7 +37,7 @@ jobs:
           path: |
             ~/zephyrproject
             ~/zephyr-sdk*
-          key: zephyr-${{ runner.os }}-v4
+          key: zephyr-${{ runner.os }}-v5
       
       - name: Setup Zephyr environment
         run: |
