@@ -37,7 +37,7 @@ jobs:
           path: |
             ~/zephyrproject
             ~/zephyr-sdk*
-          key: zephyr-${{ runner.os }}-v5
+          key: zephyr-${{ runner.os }}-v6
       
       - name: Setup Zephyr environment
         run: |
@@ -71,6 +71,7 @@ jobs:
         run: |
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
+          export ZEPHYR_SDK_INSTALL_DIR=$(ls -d ~/zephyr-sdk-* | head -1)
           cd ${{ github.workspace }}
           west twister -T tests/unit -p qemu_x86 -v
       
@@ -79,6 +80,7 @@ jobs:
         run: |
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
+          export ZEPHYR_SDK_INSTALL_DIR=$(ls -d ~/zephyr-sdk-* | head -1)
           cd ${{ github.workspace }}
           west build -b qemu_x86 app --pristine
       
@@ -101,6 +103,7 @@ jobs:
         run: |
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
+          export ZEPHYR_SDK_INSTALL_DIR=$(ls -d ~/zephyr-sdk-* | head -1)
           cd ${{ github.workspace }}
           west build -b nucleo_h723zg app --pristine
       

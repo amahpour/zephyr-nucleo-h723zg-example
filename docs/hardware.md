@@ -1,5 +1,51 @@
 # Hardware Setup (NUCLEO-H723ZG)
 
+## Prerequisites
+
+### Install OpenOCD
+
+```bash
+sudo apt install openocd
+```
+
+### USB Permissions (udev Rules)
+
+Create udev rules to allow non-root access to the ST-LINK debugger:
+
+```bash
+sudo tee /etc/udev/rules.d/99-stlink.rules << 'EOF'
+# ST-LINK V2
+ATTRS{idVendor}=="0483", ATTRS{idProduct}=="3748", MODE="0666", GROUP="plugdev"
+# ST-LINK V2-1
+ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", MODE="0666", GROUP="plugdev"
+# ST-LINK V3
+ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374e", MODE="0666", GROUP="plugdev"
+ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374f", MODE="0666", GROUP="plugdev"
+EOF
+
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+### WSL Users
+
+If using WSL, you need to pass the USB device through using `usbipd`:
+
+```powershell
+# In Windows PowerShell (Admin)
+usbipd list
+usbipd bind --busid <BUSID>
+usbipd attach --wsl --busid <BUSID>
+```
+
+After setting up udev rules, you may need to re-attach the device for the rules to take effect.
+
+Verify the device is visible:
+```bash
+lsusb | grep STMicroelectronics
+# Should show: STMicroelectronics STLINK-V3
+```
+
 ## Building for Hardware
 
 ```bash
@@ -8,13 +54,28 @@ export ZEPHYR_BASE=~/zephyrproject/zephyr
 
 cd ~/code/zephyr-nucleo-h723zg-example
 west build -b nucleo_h723zg app --pristine
-west flash
 ```
 
 **Note:** If you encounter Kconfig errors about `HAS_CMSIS_CORE`, ensure you have the CMSIS modules installed:
 ```bash
 cd ~/zephyrproject && west update cmsis cmsis_6
 ```
+
+## Flashing
+
+Flash using OpenOCD (recommended):
+
+```bash
+west flash --runner openocd
+```
+
+**Troubleshooting:**
+
+| Error | Solution |
+|-------|----------|
+| `LIBUSB_ERROR_ACCESS` | Set up udev rules (see above) and re-attach USB device |
+| `no runners.yaml found` | Rebuild with `--pristine` for the hardware target |
+| `STM32_Programmer_CLI not found` | Use `--runner openocd` instead |
 
 ## ADC Configuration (TODO)
 
