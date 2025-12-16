@@ -21,22 +21,38 @@ cd build
   -serial pty \
   -kernel zephyr/zephyr.elf
 
-# QEMU prints: char device redirected to /dev/pts/X
+# QEMU will print something like:
+# char device redirected to /dev/pts/5 (label serial0)
+# 
+# Copy the /dev/pts/X path (e.g., /dev/pts/5) from this output.
 ```
 
-## Using the Test Script
+## Using pytest (Recommended)
+
+The integration tests use pytest with fixtures that automatically manage QEMU:
 
 ```bash
-pip install pyserial
-python3 scripts/test_serial.py /dev/pts/X  # Use path from QEMU output
+pip install pytest pyserial
+
+# Build the app first
+west build -b qemu_x86 app
+
+# Run tests (QEMU starts/stops automatically)
+pytest tests/integration/ -v
 ```
+
+The pytest fixtures handle:
+- Starting QEMU with PTY serial
+- Detecting the PTY path automatically
+- Opening/closing serial connections
+- Cleaning up QEMU on test completion
 
 ## Direct pyserial Usage
 
 ```python
 import serial
 
-# For QEMU (use the /dev/pts/X from QEMU output)
+# For QEMU (replace /dev/pts/3 with the path QEMU printed)
 ser = serial.Serial('/dev/pts/3', baudrate=115200, timeout=1)
 
 # For real hardware

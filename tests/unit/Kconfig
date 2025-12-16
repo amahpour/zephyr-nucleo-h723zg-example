@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Unit Tests"
+
+config APP_NUM_CH
+    int "Number of ADC channels"
+    default 4
+    range 1 16
+    help
+      Number of ADC channels (must match app config).
+
+source "Kconfig.zephyr"
+

@@ -1,0 +1,9 @@
+tests:
+  unit.regs:
+    tags:
+      - unit
+      - regs
+    platform_allow: qemu_x86
+    integration_platforms:
+      - qemu_x86
+

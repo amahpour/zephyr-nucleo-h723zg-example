@@ -1,6 +1,10 @@
 # Zephyr build directory
 build/
 
+# Twister test output
+twister-out/
+twister-out.*/
+
 # Python
 __pycache__/
 *.py[cod]
