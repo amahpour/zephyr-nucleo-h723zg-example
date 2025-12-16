@@ -11,7 +11,10 @@ west build -b nucleo_h723zg app --pristine
 west flash
 ```
 
-**Note:** If you encounter a Kconfig warning about `HAS_CMSIS_CORE` when building with Zephyr 4.3.99 (development version), this is a known Zephyr issue. The build commands above are correct. You may need to use a stable Zephyr release (e.g., 4.2.x) or wait for the fix in upstream Zephyr.
+**Note:** If you encounter Kconfig errors about `HAS_CMSIS_CORE`, ensure you have the CMSIS modules installed:
+```bash
+cd ~/zephyrproject && west update cmsis cmsis_6
+```
 
 ## ADC Configuration (TODO)
 

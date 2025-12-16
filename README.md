@@ -15,7 +15,7 @@ pip install west
 
 west init ~/zephyrproject
 cd ~/zephyrproject
-west update zephyr hal_stm32
+west update zephyr hal_stm32 cmsis cmsis_6
 west zephyr-export
 west packages pip --install
 
