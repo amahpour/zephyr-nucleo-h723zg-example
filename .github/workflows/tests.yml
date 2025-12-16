@@ -31,9 +31,16 @@ jobs:
             xz-utils file make gcc gcc-multilib g++-multilib \
             libsdl2-dev libmagic1
       
-      - name: Setup Zephyr environment
+      - name: Cache Zephyr workspace
+        id: cache-zephyr
+        uses: actions/cache@v4
+        with:
+          path: ~/zephyrproject
+          key: zephyr-workspace-${{ runner.os }}-v1
+      
+      - name: Setup Zephyr workspace
+        if: steps.cache-zephyr.outputs.cache-hit != 'true'
         run: |
-          # Fresh setup every time (no caching - too fragile)
           python3 -m venv ~/zephyrproject/.venv
           source ~/zephyrproject/.venv/bin/activate
           pip install west
@@ -43,18 +50,12 @@ jobs:
           west update zephyr hal_stm32 cmsis cmsis_6
           west zephyr-export
           west packages pip --install
-          
-          # Install SDK
+      
+      - name: Install SDK (always fresh - binaries have hardcoded paths)
+        run: |
+          source ~/zephyrproject/.venv/bin/activate
           cd ~/zephyrproject/zephyr
           west sdk install -t x86_64-zephyr-elf arm-zephyr-eabi
-          
-          # Debug: verify SDK installation
-          echo "=== SDK Install Location ==="
-          ls -la ~/zephyr-sdk-* 2>/dev/null || echo "No SDK in ~/"
-          ls -la ~/.local/zephyr-sdk-* 2>/dev/null || echo "No SDK in ~/.local/"
-          echo "=== CMake Packages ==="
-          ls -la ~/.cmake/packages/ 2>/dev/null || echo "No CMake packages"
-          cat ~/.cmake/packages/Zephyr-sdk/* 2>/dev/null || echo "No Zephyr-sdk registration"
       
       # ==================== UNIT TESTS ====================
       - name: Run unit tests (ztest)
@@ -70,7 +71,7 @@ jobs:
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
           cd ${{ github.workspace }}
-          west build -b qemu_x86 app --pristine
+          west build -b qemu_x86 app -d build-qemu --pristine
       
       - name: Install Python test dependencies
         run: pip install -r tests/integration/requirements.txt

@@ -33,7 +33,7 @@ The integration tests use pytest with a config-driven architecture that supports
 both virtual (QEMU) and physical (real hardware) setups:
 
 ```bash
-pip install pytest pyserial pyyaml
+pip install -r tests/integration/requirements.txt
 
 # Build the app first
 west build -b qemu_x86 app -d build-qemu

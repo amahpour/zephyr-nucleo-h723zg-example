@@ -52,7 +52,7 @@ The same tests work with both virtual (QEMU) and physical (real hardware) setups
 
 ```bash
 # Install dependencies
-pip install pytest pyserial pyyaml
+pip install -r tests/integration/requirements.txt
 
 # Build the app first
 source ~/zephyrproject/.venv/bin/activate
