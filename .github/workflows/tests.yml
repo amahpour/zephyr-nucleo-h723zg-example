@@ -59,9 +59,9 @@ jobs:
             west packages pip --install
           fi
           
-          # Install SDK if not cached (x86 for QEMU, ARM for nucleo)
+          # Install SDK if not cached (need both x86 for QEMU and ARM for nucleo)
           SDK_DIR=$(ls -d ~/zephyr-sdk-* 2>/dev/null | head -1)
-          if [ -z "$SDK_DIR" ] || [ ! -d "$SDK_DIR/arm-zephyr-eabi" ]; then
+          if [ -z "$SDK_DIR" ] || [ ! -d "$SDK_DIR/arm-zephyr-eabi" ] || [ ! -d "$SDK_DIR/x86_64-zephyr-elf" ]; then
             cd ~/zephyrproject/zephyr
             west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
           fi

@@ -2,7 +2,20 @@
 
 This directory contains both unit tests and integration tests for the ADC Sampler.
 
+## CI Pipeline
+
 Tests run automatically on every push and pull request via [GitHub Actions](../.github/workflows/tests.yml).
+
+The pipeline runs in a single job to minimize environment setup time:
+
+| Stage | Description |
+|-------|-------------|
+| **Environment Setup** | Install Zephyr SDK, modules (`hal_stm32`, `cmsis`, `cmsis_6`) |
+| **Unit Tests** | Run ztest via `west twister` on QEMU |
+| **Integration Tests** | Build QEMU app, run pytest against live firmware |
+| **Firmware Build** | Build `nucleo_h723zg` target to verify ARM compilation |
+
+Artifacts uploaded: test results, firmware binaries (`.elf`, `.bin`, `.hex`)
 
 ## Unit Tests
 
