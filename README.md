@@ -1,6 +1,6 @@
 # ADC Sampler - Zephyr Application
 
-[![Tests](https://github.com/USERNAME/zephyr-nucleo-h723zg-example/actions/workflows/tests.yml/badge.svg)](https://github.com/USERNAME/zephyr-nucleo-h723zg-example/actions/workflows/tests.yml)
+[![Tests](https://github.com/amahpour/zephyr-nucleo-h723zg-example/actions/workflows/tests.yml/badge.svg)](https://github.com/amahpour/zephyr-nucleo-h723zg-example/actions/workflows/tests.yml)
 
 Periodically samples ADC channels and exposes values via UART shell commands.
 
