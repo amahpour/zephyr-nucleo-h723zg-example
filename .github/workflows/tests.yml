@@ -36,8 +36,8 @@ jobs:
         with:
           path: |
             ~/zephyrproject
-            ~/zephyr-sdk*
-          key: zephyr-${{ runner.os }}-v6
+            ~/zephyr-sdk
+          key: zephyr-${{ runner.os }}-v8
       
       - name: Setup Zephyr environment
         run: |
@@ -59,19 +59,20 @@ jobs:
             west packages pip --install
           fi
           
-          # Install SDK if not cached (need both x86 for QEMU and ARM for nucleo)
-          SDK_DIR=$(ls -d ~/zephyr-sdk-* 2>/dev/null | head -1)
-          if [ -z "$SDK_DIR" ] || [ ! -d "$SDK_DIR/arm-zephyr-eabi" ] || [ ! -d "$SDK_DIR/x86_64-zephyr-elf" ]; then
+          # Install SDK to fixed location if not cached
+          if [ ! -d ~/zephyr-sdk/arm-zephyr-eabi ] || [ ! -d ~/zephyr-sdk/x86_64-zephyr-elf ]; then
             cd ~/zephyrproject/zephyr
-            west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
+            west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi --install-dir ~/zephyr-sdk
           fi
+          
+          # Export SDK path for all subsequent steps
+          echo "ZEPHYR_SDK_INSTALL_DIR=$HOME/zephyr-sdk" >> $GITHUB_ENV
       
       # ==================== UNIT TESTS ====================
       - name: Run unit tests (ztest)
         run: |
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
-          export ZEPHYR_SDK_INSTALL_DIR=$(ls -d ~/zephyr-sdk-* | head -1)
           cd ${{ github.workspace }}
           west twister -T tests/unit -p qemu_x86 -v
       
@@ -80,7 +81,6 @@ jobs:
         run: |
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
-          export ZEPHYR_SDK_INSTALL_DIR=$(ls -d ~/zephyr-sdk-* | head -1)
           cd ${{ github.workspace }}
           west build -b qemu_x86 app --pristine
       
@@ -91,10 +91,6 @@ jobs:
       - name: Run integration tests (pytest)
         run: |
           export ZEPHYR_BASE=~/zephyrproject/zephyr
-          SDK_DIR=$(ls -d ~/zephyr-sdk-* 2>/dev/null | head -1)
-          if [ -n "$SDK_DIR" ]; then
-            export ZEPHYR_SDK_INSTALL_DIR=$SDK_DIR
-          fi
           cd ${{ github.workspace }}
           pytest tests/integration/ -v
       
@@ -103,7 +99,6 @@ jobs:
         run: |
           source ~/zephyrproject/.venv/bin/activate
           export ZEPHYR_BASE=~/zephyrproject/zephyr
-          export ZEPHYR_SDK_INSTALL_DIR=$(ls -d ~/zephyr-sdk-* | head -1)
           cd ${{ github.workspace }}
           west build -b nucleo_h723zg app --pristine
       
