@@ -37,7 +37,8 @@ jobs:
           path: |
             ~/zephyrproject
             ~/zephyr-sdk
-          key: zephyr-${{ runner.os }}-v8
+            ~/.cmake/packages
+          key: zephyr-${{ runner.os }}
       
       - name: Setup Zephyr environment
         run: |
@@ -63,6 +64,11 @@ jobs:
           if [ ! -d ~/zephyr-sdk/arm-zephyr-eabi ] || [ ! -d ~/zephyr-sdk/x86_64-zephyr-elf ]; then
             cd ~/zephyrproject/zephyr
             west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi --install-dir ~/zephyr-sdk
+          fi
+          
+          # Register SDK with CMake (required even if SDK is cached)
+          if [ ! -d ~/.cmake/packages/Zephyr-sdk ]; then
+            cmake -P ~/zephyr-sdk/cmake/zephyr_sdk_export.cmake
           fi
           
           # Export SDK path for all subsequent steps
