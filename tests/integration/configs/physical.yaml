@@ -1,0 +1,27 @@
+# Physical test configuration (real hardware + Rigol DP832)
+#
+# Usage: pytest tests/integration/ --config=tests/integration/configs/physical.yaml -v
+#
+# Requirements:
+# - STM32 Nucleo board connected via USB (appears as /dev/ttyACM0 or similar)
+# - Rigol DP832 power supply connected via network
+# - Power supply channel 1 connected to ADC input
+
+dut:
+  type: physical
+  port: /dev/ttyACM0  # Adjust for your system
+  baudrate: 115200
+
+instrument:
+  type: rigol_dp832
+  visa_resource: "TCPIP0::192.168.1.100::5555::SOCKET"  # Adjust IP address
+  channel: 1  # Power supply channel to use
+  current_limit: 0.1  # 100mA safety limit
+
+tests:
+  - test_read_initial_registers
+  - test_inject_and_read_single_channel
+  - test_inject_and_read_multiple_channels
+  - test_sequence_increment
+  - test_voltage_range_low
+  - test_voltage_range_high

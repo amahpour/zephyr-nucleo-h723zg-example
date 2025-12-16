@@ -1,0 +1,8 @@
+# Integration test dependencies
+pytest>=7.0
+pyserial>=3.5
+pyyaml>=6.0
+
+# Optional: For physical testing with Rigol DP832 power supply
+# pyvisa>=1.14
+# pyvisa-py>=0.7

@@ -1,5 +1,6 @@
 # Zephyr build directory
 build/
+build-*/
 
 # Twister test output
 twister-out/

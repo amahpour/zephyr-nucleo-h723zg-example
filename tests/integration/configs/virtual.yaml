@@ -1,0 +1,16 @@
+# Virtual test configuration (QEMU + virtual instrument)
+#
+# Usage: pytest tests/integration/ --config=tests/integration/configs/virtual.yaml -v
+
+dut:
+  type: qemu
+  kernel_path: build-qemu/zephyr/zephyr.elf
+  boot_timeout: 5.0
+
+instrument:
+  type: virtual
+
+tests:
+  - test_read_initial_registers
+  - test_inject_and_read
+  - test_sequence_increment

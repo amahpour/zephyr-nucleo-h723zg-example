@@ -10,10 +10,10 @@ QEMU simulation and real hardware.
 source ~/zephyrproject/.venv/bin/activate
 export ZEPHYR_BASE=~/zephyrproject/zephyr
 cd ~/code/zephyr-nucleo-h723zg-example
-west build -b qemu_x86 app
+west build -b qemu_x86 app -d build-qemu
 
 # Run QEMU with PTY serial
-cd build
+cd build-qemu
 ~/zephyr-sdk-0.17.4/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-i386 \
   -m 32 -cpu qemu32,+nx,+pae -machine q35 \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
@@ -29,16 +29,18 @@ cd build
 
 ## Using pytest (Recommended)
 
-The integration tests use pytest with fixtures that automatically manage QEMU:
+The integration tests use pytest with a config-driven architecture that supports
+both virtual (QEMU) and physical (real hardware) setups:
 
 ```bash
-pip install pytest pyserial
+pip install pytest pyserial pyyaml
 
 # Build the app first
-west build -b qemu_x86 app
+west build -b qemu_x86 app -d build-qemu
 
-# Run tests (QEMU starts/stops automatically)
-pytest tests/integration/ -v
+# Run virtual tests (QEMU starts/stops automatically)
+PYTHONPATH=tests/integration pytest tests/integration/ \
+    --config=tests/integration/configs/virtual.yaml -v
 ```
 
 The pytest fixtures handle:
@@ -46,6 +48,18 @@ The pytest fixtures handle:
 - Detecting the PTY path automatically
 - Opening/closing serial connections
 - Cleaning up QEMU on test completion
+
+### Physical Hardware Testing
+
+For testing with real hardware and a power supply:
+
+```bash
+# Edit configs/physical.yaml with your settings
+# Then run:
+pip install pyvisa pyvisa-py  # For Rigol DP832 support
+PYTHONPATH=tests/integration pytest tests/integration/ \
+    --config=tests/integration/configs/physical.yaml -v
+```
 
 ## Direct pyserial Usage
 
@@ -78,4 +92,3 @@ west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
 ```bash
 export ZEPHYR_BASE=~/zephyrproject/zephyr
 ```
-

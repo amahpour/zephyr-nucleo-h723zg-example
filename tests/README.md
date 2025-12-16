@@ -45,32 +45,68 @@ west twister -p qemu_x86 -s unit.regs
 
 ## Integration Tests
 
-Python-based integration tests using pytest. Tests automatically start/stop QEMU:
+Python-based integration tests using pytest with a config-driven architecture.
+The same tests work with both virtual (QEMU) and physical (real hardware) setups.
+
+### Quick Start (Virtual/QEMU)
 
 ```bash
 # Install dependencies
-pip install pytest pyserial
+pip install pytest pyserial pyyaml
 
 # Build the app first
 source ~/zephyrproject/.venv/bin/activate
 export ZEPHYR_BASE=~/zephyrproject/zephyr
 cd ~/code/zephyr-nucleo-h723zg-example
-west build -b qemu_x86 app
+west build -b qemu_x86 app -d build-qemu
 
 # Run integration tests
-pytest tests/integration/ -v
+PYTHONPATH=tests/integration pytest tests/integration/ \
+    --config=tests/integration/configs/virtual.yaml -v
 ```
 
 ### Test Structure
 
-- `tests/integration/` - Python integration tests
-  - `test_serial.py` - Serial communication tests (pytest class)
-  - `conftest.py` - Pytest configuration
-  - `pytest.ini` - Pytest settings
+```
+tests/integration/
+├── configs/
+│   ├── virtual.yaml        # QEMU + virtual instrument config
+│   └── physical.yaml       # Real hardware + Rigol DP832 config
+├── devices/
+│   ├── base.py             # DUTBase abstract interface
+│   ├── qemu.py             # QEMU device (PTY auto-detection)
+│   └── physical.py         # Physical UART device
+├── instruments/
+│   ├── base.py             # InstrumentBase abstract interface
+│   ├── virtual.py          # Virtual instrument (adcset injection)
+│   ├── rigol_adapter.py    # Rigol DP832 adapter
+│   └── rigol_dp832/        # Rigol DP832 driver library
+├── conftest.py             # Config-driven pytest fixtures
+├── pytest.ini              # Pytest settings
+└── test_adc.py             # Generic ADC tests
+```
 
 ### Features
 
+- **Config-driven**: YAML files specify DUT and instrument types
+- **Generic tests**: Same tests work with virtual or physical setups
+- **Layered abstraction**: `DUTBase` and `InstrumentBase` ABCs
 - **Automatic QEMU management**: Fixtures handle QEMU startup/teardown
 - **PTY auto-detection**: Automatically finds the PTY path from QEMU output
-- **Serial connection management**: Fixtures handle connection lifecycle
 
+### Running Physical Tests
+
+For testing with real hardware and a Rigol DP832 power supply:
+
+```bash
+# Edit configs/physical.yaml with your settings:
+#   - Serial port (e.g., /dev/ttyACM0)
+#   - Rigol DP832 VISA resource string
+
+# Install additional dependency
+pip install pyvisa pyvisa-py
+
+# Run physical tests
+PYTHONPATH=tests/integration pytest tests/integration/ \
+    --config=tests/integration/configs/physical.yaml -v
+```

@@ -46,7 +46,7 @@ jobs:
           
           # Install SDK
           cd ~/zephyrproject/zephyr
-          west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
+          west sdk install -t x86_64-zephyr-elf arm-zephyr-eabi
           
           # Debug: verify SDK installation
           echo "=== SDK Install Location ==="
@@ -73,14 +73,14 @@ jobs:
           west build -b qemu_x86 app --pristine
       
       - name: Install Python test dependencies
-        run: |
-          pip install pytest pyserial
+        run: pip install -r tests/integration/requirements.txt
       
       - name: Run integration tests (pytest)
         run: |
           export ZEPHYR_BASE=~/zephyrproject/zephyr
           cd ${{ github.workspace }}
-          pytest tests/integration/ -v
+          PYTHONPATH=tests/integration pytest tests/integration/ \
+            --config=tests/integration/configs/virtual.yaml -v
       
       # ==================== FIRMWARE BUILD ====================
       - name: Build nucleo_h723zg firmware
