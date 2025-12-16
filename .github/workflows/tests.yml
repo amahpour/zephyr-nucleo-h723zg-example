@@ -31,37 +31,30 @@ jobs:
             xz-utils file make gcc gcc-multilib g++-multilib \
             libsdl2-dev libmagic1
       
-      - name: Cache Zephyr workspace
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/zephyrproject
-            ~/.cmake/packages
-          key: zephyr-${{ runner.os }}-workspace
-      
       - name: Setup Zephyr environment
         run: |
+          # Fresh setup every time (no caching - too fragile)
           python3 -m venv ~/zephyrproject/.venv
           source ~/zephyrproject/.venv/bin/activate
           pip install west
           
-          # Initialize if not cached
-          if [ ! -f ~/zephyrproject/zephyr/CMakeLists.txt ]; then
-            west init ~/zephyrproject
-          fi
-          
+          west init ~/zephyrproject
           cd ~/zephyrproject
+          west update zephyr hal_stm32 cmsis cmsis_6
+          west zephyr-export
+          west packages pip --install
           
-          # Update modules if any are missing
-          if [ ! -d modules/hal/stm32 ] || [ ! -d modules/hal/cmsis ] || [ ! -d modules/hal/cmsis_6 ]; then
-            west update zephyr hal_stm32 cmsis cmsis_6
-            west zephyr-export
-            west packages pip --install
-          fi
-          
-          # Always install SDK fresh (binaries have hardcoded paths, can't be cached reliably)
+          # Install SDK
           cd ~/zephyrproject/zephyr
           west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
+          
+          # Debug: verify SDK installation
+          echo "=== SDK Install Location ==="
+          ls -la ~/zephyr-sdk-* 2>/dev/null || echo "No SDK in ~/"
+          ls -la ~/.local/zephyr-sdk-* 2>/dev/null || echo "No SDK in ~/.local/"
+          echo "=== CMake Packages ==="
+          ls -la ~/.cmake/packages/ 2>/dev/null || echo "No CMake packages"
+          cat ~/.cmake/packages/Zephyr-sdk/* 2>/dev/null || echo "No Zephyr-sdk registration"
       
       # ==================== UNIT TESTS ====================
       - name: Run unit tests (ztest)
