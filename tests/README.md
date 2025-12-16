@@ -2,6 +2,8 @@
 
 This directory contains both unit tests and integration tests for the ADC Sampler.
 
+Tests run automatically on every push and pull request via [GitHub Actions](../.github/workflows/tests.yml).
+
 ## Unit Tests
 
 Zephyr ztest-based unit tests that run on QEMU:
