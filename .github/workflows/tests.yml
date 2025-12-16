@@ -37,9 +37,7 @@ jobs:
           path: |
             ~/zephyrproject
             ~/zephyr-sdk*
-          key: zephyr-${{ runner.os }}-v3
-          restore-keys: |
-            zephyr-${{ runner.os }}-
+          key: zephyr-${{ runner.os }}-v4
       
       - name: Setup Zephyr environment
         run: |
@@ -47,18 +45,23 @@ jobs:
           source ~/zephyrproject/.venv/bin/activate
           pip install west
           
-          # Only initialize if not cached
+          # Initialize if not cached
           if [ ! -f ~/zephyrproject/zephyr/CMakeLists.txt ]; then
             west init ~/zephyrproject
-            cd ~/zephyrproject
+          fi
+          
+          cd ~/zephyrproject
+          
+          # Update modules if any are missing (hal_stm32 has the STM32 pinctrl files)
+          if [ ! -d modules/hal/stm32 ] || [ ! -d modules/hal/cmsis ] || [ ! -d modules/hal/cmsis_6 ]; then
             west update zephyr hal_stm32 cmsis cmsis_6
             west zephyr-export
             west packages pip --install
           fi
           
-          # Only install SDK if not cached (x86 for QEMU, ARM for nucleo)
+          # Install SDK if not cached (x86 for QEMU, ARM for nucleo)
           SDK_DIR=$(ls -d ~/zephyr-sdk-* 2>/dev/null | head -1)
-          if [ -z "$SDK_DIR" ] || [ ! -d "$SDK_DIR/x86_64-zephyr-elf" ]; then
+          if [ -z "$SDK_DIR" ] || [ ! -d "$SDK_DIR/arm-zephyr-eabi" ]; then
             cd ~/zephyrproject/zephyr
             west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
           fi
