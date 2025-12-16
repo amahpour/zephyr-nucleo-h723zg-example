@@ -1,5 +1,0 @@
-manifest:
-  version: "0.13"
-  self:
-    path: app
-
