@@ -20,7 +20,7 @@ west zephyr-export
 west packages pip --install
 
 cd zephyr
-west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
+west sdk install -t x86_64-zephyr-elf arm-zephyr-eabi
 ```
 
 Or follow the full [Zephyr Getting Started Guide](https://docs.zephyrproject.org/latest/develop/getting_started/index.html).

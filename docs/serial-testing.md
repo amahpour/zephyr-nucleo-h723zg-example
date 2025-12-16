@@ -85,7 +85,7 @@ print(ser.read(4096).decode())
 
 **"C compiler not found"**: Install the toolchain:
 ```bash
-west sdk install -t x86_64-zephyr-elf -t arm-zephyr-eabi
+west sdk install -t x86_64-zephyr-elf arm-zephyr-eabi
 ```
 
 **"unknown command 'build'"**: Set ZEPHYR_BASE:
