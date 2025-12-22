@@ -3,7 +3,7 @@ Rigol DP832 adapter implementing InstrumentBase interface.
 """
 
 from .base import InstrumentBase
-from .rigol_dp832 import DP832
+from rigol_dp832.rigol_dp import DP832
 
 
 class RigolDP832Adapter(InstrumentBase):

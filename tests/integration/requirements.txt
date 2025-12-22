@@ -3,6 +3,5 @@ pytest>=7.0
 pyserial>=3.5
 pyyaml>=6.0
 
-# Optional: For physical testing with Rigol DP832 power supply
-# pyvisa>=1.14
-# pyvisa-py>=0.7
+# Rigol DP832 power supply control
+rigol-dp832 @ git+https://github.com/amahpour/rigol_dp832_mcp_server.git
