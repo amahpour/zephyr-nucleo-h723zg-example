@@ -68,14 +68,16 @@ def create_instrument(instrument_config: dict, dut):
 
     if inst_type == "virtual":
         return VirtualInstrument(dut)
-    elif inst_type == "rigol_dp832":
+    elif inst_type == "physical":
         # Import here to avoid dependency when not needed
-        from instruments.rigol_adapter import RigolDP832Adapter
+        from instruments.physical import PhysicalInstrument
 
-        return RigolDP832Adapter(
-            visa_resource=instrument_config.get("visa_resource"),
-            channel=instrument_config.get("channel", 1),
-            current_limit=instrument_config.get("current_limit", 0.1),
+        psu_config = instrument_config.get("power_supply", {})
+        mux_config = instrument_config.get("mux", {})
+
+        return PhysicalInstrument(
+            psu_config=psu_config,
+            mux_config=mux_config,
         )
     else:
         raise ValueError(f"Unknown instrument type: {inst_type}")

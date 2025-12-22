@@ -5,3 +5,7 @@ pyyaml>=6.0
 
 # Rigol DP832 power supply control
 rigol-dp832 @ git+https://github.com/amahpour/rigol_dp832_mcp_server.git
+
+# KB2040 mux controller for physical testing
+# Install from python subdirectory where pyproject.toml is located
+mux-controller @ git+https://github.com/amahpour/KB2040-CD74HCx4067-controller.git#subdirectory=python

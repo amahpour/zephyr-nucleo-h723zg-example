@@ -1,11 +1,12 @@
-# Physical test configuration (real hardware + Rigol DP832)
+# Physical test configuration (real hardware + Rigol DP832 + KB2040 mux)
 #
 # Usage: pytest tests/integration/ --config=tests/integration/configs/physical.yaml -v
 #
 # Requirements:
 # - STM32 Nucleo board connected via USB (appears as /dev/ttyACM0 or similar)
 # - Rigol DP832 power supply connected via network
-# - Power supply channel 1 connected to ADC input
+# - KB2040 mux controller connected via USB (appears as /dev/ttyACM1 or similar)
+# - Power supply output connected to mux input, mux outputs connected to ADC inputs
 
 dut:
   type: physical
@@ -13,10 +14,16 @@ dut:
   baudrate: 115200
 
 instrument:
-  type: rigol_dp832
-  visa_resource: "TCPIP0::192.168.1.100::5555::SOCKET"  # Adjust IP address
-  channel: 1  # Power supply channel to use
-  current_limit: 0.1  # 100mA safety limit
+  type: physical
+  
+  power_supply:
+    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Adjust IP address
+    channel: 3  # Power supply channel to use
+    current_limit: 0.1  # 100mA safety limit
+  
+  mux:
+    port: /dev/cu.usbmodem101  # KB2040 serial port - adjust for your system (Linux: /dev/ttyACM1, macOS: /dev/cu.usbmodem101)
+    baudrate: 115200
 
 tests:
   - test_read_initial_registers
