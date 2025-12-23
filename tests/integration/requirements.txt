@@ -3,6 +3,9 @@ pytest>=7.0
 pyserial>=3.5
 pyyaml>=6.0
 
+# VISA backend for PyVISA (required for Rigol DP832)
+pyvisa-py>=0.6.0
+
 # Rigol DP832 power supply control (actual package name: rigol-dp832-mcp-server)
 rigol-dp832-mcp-server @ git+https://github.com/amahpour/rigol_dp832_mcp_server.git
 

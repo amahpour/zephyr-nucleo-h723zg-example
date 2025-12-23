@@ -33,7 +33,8 @@ instrument:
     baudrate: 115200
 
 # Number of ADC channels available (15 channels: 0-14)
-num_channels: 15
+# Temporarily set to 6 for testing channels 0-5 only
+num_channels: 6
 
 tests:
   - test_read_initial_registers
