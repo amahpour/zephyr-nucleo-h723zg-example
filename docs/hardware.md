@@ -250,6 +250,9 @@ cd tests/integration
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# For physical hardware tests, also install:
+pip install -r requirements-physical.txt
 ```
 
 ### Physical Hardware Tests

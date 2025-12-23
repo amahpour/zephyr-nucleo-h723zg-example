@@ -3,9 +3,12 @@ pytest>=7.0
 pyserial>=3.5
 pyyaml>=6.0
 
-# Rigol DP832 power supply control
-rigol-dp832 @ git+https://github.com/amahpour/rigol_dp832_mcp_server.git
+# Optional: Physical hardware testing dependencies
+# These are only needed for physical.yaml tests, not virtual/QEMU tests
+# Uncomment if running physical hardware tests:
 
-# KB2040 mux controller for physical testing
-# Install from python subdirectory where pyproject.toml is located
-mux-controller @ git+https://github.com/amahpour/KB2040-CD74HCx4067-controller.git#subdirectory=python
+# Rigol DP832 power supply control
+# rigol-dp832 @ git+https://github.com/amahpour/rigol_dp832_mcp_server.git
+
+# KB2040 mux controller (package name: cd74hc4067-mux-controller)
+# cd74hc4067-mux-controller @ git+https://github.com/amahpour/KB2040-CD74HCx4067-controller.git#subdirectory=python
