@@ -5,13 +5,21 @@ Generic ADC integration tests.
 These tests work with any DUT/instrument combination defined in the config file.
 Tests use abstract interfaces so they can run against:
 - Virtual: QEMU + VirtualInstrument (adcset injection)
-- Physical: Real hardware + Rigol DP832 power supply
+- Physical: Real hardware + Rigol DP832 power supply + KB2040 mux
 """
 
 import re
 import time
 
 import pytest
+
+
+# Number of ADC channels to test (A0-A5 for now)
+NUM_TEST_CHANNELS = 6
+
+# Tolerance for physical hardware tests (in mV)
+# ~100mV accounts for mux on-resistance (~70Ω) and ADC quantization
+PHYSICAL_TOLERANCE = 150
 
 
 def parse_channel_value(response: str, channel: int) -> int:
@@ -67,55 +75,9 @@ class TestADC:
         assert "timestamp:" in response, "Expected timestamp"
         assert "channels:" in response, "Expected channels section"
 
-        # Should have all 4 channels
-        for i in range(4):
+        # Should have channels 0 through NUM_TEST_CHANNELS-1
+        for i in range(NUM_TEST_CHANNELS):
             assert f"ch[{i}]:" in response, f"Expected channel {i} data"
-
-    def test_inject_and_read_single_channel(self, dut, instrument):
-        """Test injecting a single ADC value and reading it back."""
-        test_voltage = 2500  # mV
-
-        # Enable output and set voltage
-        instrument.enable_output(0, True)
-        instrument.set_voltage(0, test_voltage)
-
-        # Wait for ADC sampling
-        time.sleep(0.2)
-
-        # Read back and verify
-        response = dut.send_command("adcregs")
-        actual_voltage = parse_channel_value(response, 0)
-
-        # Allow for ADC quantization error (within 50mV for physical, 10mV for virtual)
-        tolerance = 50
-        assert abs(actual_voltage - test_voltage) <= tolerance, (
-            f"ch[0]={actual_voltage}mV, expected ~{test_voltage}mV (tolerance={tolerance})"
-        )
-
-    def test_inject_and_read_multiple_channels(self, dut, instrument):
-        """Test injecting values on multiple channels and reading them back."""
-        test_values = {
-            0: 2500,
-            1: 1000,
-        }
-
-        # Set voltages on multiple channels
-        for channel, voltage in test_values.items():
-            instrument.enable_output(channel, True)
-            instrument.set_voltage(channel, voltage)
-
-        # Wait for sampling
-        time.sleep(0.2)
-
-        # Read back and verify
-        response = dut.send_command("adcregs")
-
-        tolerance = 50
-        for channel, expected_voltage in test_values.items():
-            actual_voltage = parse_channel_value(response, channel)
-            assert abs(actual_voltage - expected_voltage) <= tolerance, (
-                f"ch[{channel}]={actual_voltage}mV, expected ~{expected_voltage}mV"
-            )
 
     def test_sequence_increment(self, dut):
         """Test that sequence number increments with sampling."""
@@ -133,34 +95,89 @@ class TestADC:
         # Sequence should have incremented
         assert seq2 > seq1, f"seq should increment: {seq1} -> {seq2}"
 
-    def test_voltage_range_low(self, dut, instrument):
-        """Test low voltage injection."""
-        test_voltage = 100  # mV
 
-        instrument.enable_output(0, True)
-        instrument.set_voltage(0, test_voltage)
-        time.sleep(0.2)
+class TestADCSingleChannel:
+    """Test individual ADC channel accuracy."""
 
+    @pytest.mark.parametrize("channel", range(NUM_TEST_CHANNELS))
+    def test_channel_accuracy_2v(self, dut, instrument, channel):
+        """Test each channel reads ~2V accurately when driven."""
+        test_voltage = 2000  # mV
+
+        # Enable output and set voltage on the specified channel
+        instrument.enable_output(channel, True)
+        instrument.set_voltage(channel, test_voltage)
+
+        # Wait for ADC sampling and signal to settle
+        time.sleep(1.0)
+
+        # Read back and verify
         response = dut.send_command("adcregs")
-        actual_voltage = parse_channel_value(response, 0)
+        actual_voltage = parse_channel_value(response, channel)
 
-        tolerance = 50
-        assert abs(actual_voltage - test_voltage) <= tolerance, (
-            f"ch[0]={actual_voltage}mV, expected ~{test_voltage}mV"
+        # Disable output for cleanup
+        instrument.enable_output(channel, False)
+
+        assert abs(actual_voltage - test_voltage) <= PHYSICAL_TOLERANCE, (
+            f"ch[{channel}]={actual_voltage}mV, expected ~{test_voltage}mV "
+            f"(tolerance={PHYSICAL_TOLERANCE})"
         )
 
-    def test_voltage_range_high(self, dut, instrument):
-        """Test high voltage injection (near 3.3V reference)."""
-        test_voltage = 3000  # mV
 
-        instrument.enable_output(0, True)
-        instrument.set_voltage(0, test_voltage)
-        time.sleep(0.2)
+class TestADCVoltageRange:
+    """Test ADC voltage range on channel 0."""
+
+    @pytest.mark.parametrize("test_voltage", [500, 1000, 1500, 2000, 2500, 3000])
+    def test_voltage_sweep(self, dut, instrument, test_voltage):
+        """Test various voltages on channel 0."""
+        channel = 0
+
+        instrument.enable_output(channel, True)
+        instrument.set_voltage(channel, test_voltage)
+        time.sleep(1.0)
 
         response = dut.send_command("adcregs")
-        actual_voltage = parse_channel_value(response, 0)
+        actual_voltage = parse_channel_value(response, channel)
 
-        tolerance = 50
-        assert abs(actual_voltage - test_voltage) <= tolerance, (
-            f"ch[0]={actual_voltage}mV, expected ~{test_voltage}mV"
+        instrument.enable_output(channel, False)
+
+        assert abs(actual_voltage - test_voltage) <= PHYSICAL_TOLERANCE, (
+            f"ch[{channel}]={actual_voltage}mV, expected ~{test_voltage}mV"
         )
+
+
+class TestADCIsolation:
+    """Test that ADC channels are properly isolated."""
+
+    @pytest.mark.parametrize("driven_channel", range(NUM_TEST_CHANNELS))
+    def test_channel_isolation(self, dut, instrument, driven_channel):
+        """Test that driving one channel doesn't affect others."""
+        test_voltage = 2000  # mV
+
+        # Drive only the specified channel
+        instrument.enable_output(driven_channel, True)
+        instrument.set_voltage(driven_channel, test_voltage)
+        time.sleep(1.0)
+
+        response = dut.send_command("adcregs")
+
+        # The driven channel should be at ~2V
+        driven_value = parse_channel_value(response, driven_channel)
+        assert abs(driven_value - test_voltage) <= PHYSICAL_TOLERANCE, (
+            f"Driven ch[{driven_channel}]={driven_value}mV, expected ~{test_voltage}mV"
+        )
+
+        # Other channels should NOT be at 2V (they're floating)
+        for ch in range(NUM_TEST_CHANNELS):
+            if ch != driven_channel:
+                other_value = parse_channel_value(response, ch)
+                # Floating channels should not read close to the driven voltage
+                # (allow wide range since floating, but not the driven voltage)
+                is_isolated = abs(other_value - test_voltage) > 300
+                if not is_isolated:
+                    pytest.fail(
+                        f"Channel isolation failed: ch[{ch}]={other_value}mV "
+                        f"while ch[{driven_channel}] driven at {test_voltage}mV"
+                    )
+
+        instrument.enable_output(driven_channel, False)

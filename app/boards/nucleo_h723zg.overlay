@@ -1,0 +1,36 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Devicetree overlay for NUCLEO-H723ZG - 15-channel ADC configuration
+ * 
+ * Configures ADC1 and ADC3 with proper pinctrl for all channels.
+ */
+
+&adc1 {
+	status = "okay";
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	pinctrl-0 = <&adc1_inp15_pa3   /* C0: A0 */
+	             &adc1_inp10_pc0   /* C1: A1 */
+	             &adc1_inp5_pb1    /* C3: A3 */
+	             &adc1_inp19_pa5   /* C6: D13 */
+	             &adc1_inp3_pa6    /* C7: D12 */
+	             &adc1_inp18_pa4   /* C8: D24 */
+	             &adc1_inp16_pa0   /* C13: D32 */
+	             &adc1_inp9_pb0>;  /* C14: D33 */
+	pinctrl-names = "default";
+};
+
+&adc3 {
+	status = "okay";
+	st,adc-clock-source = "SYNC";
+	st,adc-prescaler = <4>;
+	pinctrl-0 = <&adc3_inp1_pc3_c  /* C2: A2 - PC3 is ADC3_INP1 */
+	             &adc3_inp0_pc2_c  /* C4: A4 - PC2 is ADC3_INP0 */
+	             &adc3_inp6_pf10   /* C5: A5 */
+	             &adc3_inp5_pf3    /* C9: D8 */
+	             &adc3_inp9_pf4    /* C10: A6 */
+	             &adc3_inp4_pf5    /* C11: A7 */
+	             &adc3_inp8_pf6>;  /* C12: A8 */
+	pinctrl-names = "default";
+};

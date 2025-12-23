@@ -3,14 +3,21 @@
 # Usage: pytest tests/integration/ --config=tests/integration/configs/physical.yaml -v
 #
 # Requirements:
-# - STM32 Nucleo board connected via USB (appears as /dev/ttyACM0 or similar)
+# - STM32 Nucleo board connected via USB
 # - Rigol DP832 power supply connected via network
-# - KB2040 mux controller connected via USB (appears as /dev/ttyACM1 or similar)
-# - Power supply output connected to mux input, mux outputs connected to ADC inputs
+# - KB2040 mux controller connected via USB
+# - Power supply CH3 output connected to mux common input (SIG)
+# - Mux outputs Y0-Y14 connected to Nucleo ADC inputs per docs/hardware.md
+#
+# Channel Configuration:
+# - 15 ADC channels (mux channels 0-14, board labels CH1-CH15)
+# - Build firmware with: west build -b nucleo_h723zg app --pristine -- -DCONFIG_APP_NUM_CH=15
+#
+# See docs/hardware.md for complete wiring guide
 
 dut:
   type: physical
-  port: /dev/ttyACM0  # Adjust for your system
+  port: /dev/cu.usbmodem11103  # Nucleo ST-LINK serial (macOS), Linux: /dev/ttyACM0
   baudrate: 115200
 
 instrument:
