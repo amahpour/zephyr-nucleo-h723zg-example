@@ -61,13 +61,13 @@ int adc_backend_init(void)
             return ret;
         }
 
-        /* Set initial emulator value (mid-scale) */
-        ret = adc_emul_const_value_set(adc_dev, i, 1650);
+        /* Set initial emulator value (0 mV default) */
+        ret = adc_emul_const_value_set(adc_dev, i, 0);
         if (ret < 0) {
             LOG_WRN("Failed to set initial emulator value for ch %d: %d", i, ret);
         }
 
-        injected_mv[i] = 1650;
+        injected_mv[i] = 0;
         injection_enabled[i] = false;
     }
 

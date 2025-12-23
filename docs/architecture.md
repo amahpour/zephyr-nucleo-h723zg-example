@@ -35,9 +35,9 @@ Kconfig at build time:
 
 ## Configuration Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `CONFIG_APP_NUM_CH` | 4 | Number of ADC channels |
+| Option | Board Default | Description |
+|--------|---------------|-------------|
+| `CONFIG_APP_NUM_CH` | 15 | Number of ADC channels |
 | `CONFIG_APP_SAMPLE_PERIOD_MS` | 100 | Sampling interval (ms) |
 
 ## Sampling Behavior
@@ -53,8 +53,8 @@ The `seq` field increments with each sample.
 ## ADC Emulator (Simulator)
 
 Uses Zephyr's `adc-emul` driver:
-- 4 channels (configurable)
+- 15 channels (matches hardware configuration)
 - 3.3V reference
 - 12-bit resolution
-- Initial value: 1650 mV (mid-scale)
+- Initial value: 0 mV
 

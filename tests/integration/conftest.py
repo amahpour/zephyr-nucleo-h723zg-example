@@ -103,3 +103,27 @@ def instrument(test_config, dut):
     inst.connect()
     yield inst
     inst.disconnect()
+
+
+@pytest.fixture(scope="session")
+def num_test_channels(test_config):
+    """Get the number of test channels from config."""
+    return test_config.get("num_channels", 15)
+
+
+def pytest_generate_tests(metafunc):
+    """Dynamically parametrize tests based on config."""
+    # Get config from request
+    config_path = metafunc.config.getoption("--config")
+    if config_path:
+        config_file = Path(config_path)
+        if config_file.exists():
+            with open(config_file) as f:
+                test_config = yaml.safe_load(f)
+                num_channels = test_config.get("num_channels", 15)
+                
+                # Parametrize channel-based tests
+                if "channel" in metafunc.fixturenames:
+                    metafunc.parametrize("channel", range(num_channels))
+                if "driven_channel" in metafunc.fixturenames:
+                    metafunc.parametrize("driven_channel", range(num_channels))

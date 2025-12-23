@@ -42,7 +42,7 @@ class VirtualInstrument(InstrumentBase):
         Inject ADC value via DUT's adcset command.
 
         Args:
-            channel: ADC channel number (0-3)
+            channel: ADC channel number (0-14)
             voltage_mv: Voltage in millivolts
         """
         response = self._dut.send_command(f"adcset {channel} {voltage_mv}")

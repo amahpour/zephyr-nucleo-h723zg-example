@@ -32,6 +32,9 @@ instrument:
     port: /dev/cu.usbmodem101  # KB2040 serial port - adjust for your system (Linux: /dev/ttyACM1, macOS: /dev/cu.usbmodem101)
     baudrate: 115200
 
+# Number of ADC channels available (15 channels: 0-14)
+num_channels: 15
+
 tests:
   - test_read_initial_registers
   - test_inject_and_read_single_channel

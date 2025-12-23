@@ -13,13 +13,15 @@ import time
 
 import pytest
 
+from instruments.virtual import VirtualInstrument
 
-# Number of ADC channels to test (A0-A5 for now)
-NUM_TEST_CHANNELS = 6
 
 # Tolerance for physical hardware tests (in mV)
 # ~100mV accounts for mux on-resistance (~70Ω) and ADC quantization
 PHYSICAL_TOLERANCE = 150
+
+# Default ADC value in virtual mode (0 mV)
+VIRTUAL_DEFAULT_MV = 0
 
 
 def parse_channel_value(response: str, channel: int) -> int:
@@ -65,7 +67,7 @@ def parse_sequence_number(response: str) -> int:
 class TestADC:
     """Generic ADC tests - work with any instrument/DUT combination."""
 
-    def test_read_initial_registers(self, dut):
+    def test_read_initial_registers(self, dut, num_test_channels):
         """Test reading ADC registers after boot."""
         response = dut.send_command("adcregs")
 
@@ -75,8 +77,8 @@ class TestADC:
         assert "timestamp:" in response, "Expected timestamp"
         assert "channels:" in response, "Expected channels section"
 
-        # Should have channels 0 through NUM_TEST_CHANNELS-1
-        for i in range(NUM_TEST_CHANNELS):
+        # Should have channels 0 through num_test_channels-1
+        for i in range(num_test_channels):
             assert f"ch[{i}]:" in response, f"Expected channel {i} data"
 
     def test_sequence_increment(self, dut):
@@ -99,7 +101,6 @@ class TestADC:
 class TestADCSingleChannel:
     """Test individual ADC channel accuracy."""
 
-    @pytest.mark.parametrize("channel", range(NUM_TEST_CHANNELS))
     def test_channel_accuracy_2v(self, dut, instrument, channel):
         """Test each channel reads ~2V accurately when driven."""
         test_voltage = 2000  # mV
@@ -115,13 +116,16 @@ class TestADCSingleChannel:
         response = dut.send_command("adcregs")
         actual_voltage = parse_channel_value(response, channel)
 
-        # Disable output for cleanup
-        instrument.enable_output(channel, False)
-
         assert abs(actual_voltage - test_voltage) <= PHYSICAL_TOLERANCE, (
             f"ch[{channel}]={actual_voltage}mV, expected ~{test_voltage}mV "
             f"(tolerance={PHYSICAL_TOLERANCE})"
         )
+
+        # Reset channel to default for cleanup (virtual mode needs explicit reset)
+        instrument.enable_output(channel, False)
+        # For virtual instruments, reset to default value
+        if isinstance(instrument, VirtualInstrument):
+            instrument.set_voltage(channel, VIRTUAL_DEFAULT_MV)
 
 
 class TestADCVoltageRange:
@@ -139,20 +143,30 @@ class TestADCVoltageRange:
         response = dut.send_command("adcregs")
         actual_voltage = parse_channel_value(response, channel)
 
-        instrument.enable_output(channel, False)
-
         assert abs(actual_voltage - test_voltage) <= PHYSICAL_TOLERANCE, (
             f"ch[{channel}]={actual_voltage}mV, expected ~{test_voltage}mV"
         )
+
+        # Reset channel to default for cleanup (virtual mode needs explicit reset)
+        instrument.enable_output(channel, False)
+        # For virtual instruments, reset to default value
+        if isinstance(instrument, VirtualInstrument):
+            instrument.set_voltage(channel, VIRTUAL_DEFAULT_MV)
 
 
 class TestADCIsolation:
     """Test that ADC channels are properly isolated."""
 
-    @pytest.mark.parametrize("driven_channel", range(NUM_TEST_CHANNELS))
-    def test_channel_isolation(self, dut, instrument, driven_channel):
+    def test_channel_isolation(self, dut, instrument, driven_channel, num_test_channels):
         """Test that driving one channel doesn't affect others."""
         test_voltage = 2000  # mV
+
+        # Reset all channels to default first (important for virtual mode)
+        # This ensures previous tests don't affect this one
+        if isinstance(instrument, VirtualInstrument):
+            for ch in range(num_test_channels):
+                instrument.set_voltage(ch, VIRTUAL_DEFAULT_MV)
+            time.sleep(0.5)  # Wait for reset to take effect
 
         # Drive only the specified channel
         instrument.enable_output(driven_channel, True)
@@ -168,7 +182,7 @@ class TestADCIsolation:
         )
 
         # Other channels should NOT be at 2V (they're floating)
-        for ch in range(NUM_TEST_CHANNELS):
+        for ch in range(num_test_channels):
             if ch != driven_channel:
                 other_value = parse_channel_value(response, ch)
                 # Floating channels should not read close to the driven voltage
@@ -180,4 +194,8 @@ class TestADCIsolation:
                         f"while ch[{driven_channel}] driven at {test_voltage}mV"
                     )
 
+        # Reset channel to default for cleanup
         instrument.enable_output(driven_channel, False)
+        # For virtual instruments, reset to default value
+        if isinstance(instrument, VirtualInstrument):
+            instrument.set_voltage(driven_channel, VIRTUAL_DEFAULT_MV)

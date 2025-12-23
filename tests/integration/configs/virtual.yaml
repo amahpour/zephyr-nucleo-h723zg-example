@@ -10,6 +10,9 @@ dut:
 instrument:
   type: virtual
 
+# Number of ADC channels available (QEMU supports 15 channels: 0-14, matching hardware)
+num_channels: 15
+
 tests:
   - test_read_initial_registers
   - test_inject_and_read

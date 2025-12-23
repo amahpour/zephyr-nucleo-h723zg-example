@@ -51,8 +51,8 @@ ADC Register File:
   seq:       5
   timestamp: 500 ms
   channels:
-    ch[0]: 1650 mV
-    ch[1]: 1650 mV
+    ch[0]: 0 mV
+    ch[1]: 0 mV
 
 uart:~$ adcset 0 2500
 Set ch[0] = 2500 mV
