@@ -1,22 +1,39 @@
-# Physical test configuration (real hardware + Rigol DP832)
+# Physical test configuration (real hardware + Rigol DP832 + KB2040 mux)
 #
 # Usage: pytest tests/integration/ --config=tests/integration/configs/physical.yaml -v
 #
 # Requirements:
-# - STM32 Nucleo board connected via USB (appears as /dev/ttyACM0 or similar)
+# - STM32 Nucleo board connected via USB
 # - Rigol DP832 power supply connected via network
-# - Power supply channel 1 connected to ADC input
+# - KB2040 mux controller connected via USB
+# - Power supply CH3 output connected to mux common input (SIG)
+# - Mux outputs Y0-Y14 connected to Nucleo ADC inputs per docs/hardware.md
+#
+# Channel Configuration:
+# - 15 ADC channels (mux channels 0-14, board labels CH1-CH15)
+# - Build firmware with: west build -b nucleo_h723zg app --pristine -- -DCONFIG_APP_NUM_CH=15
+#
+# See docs/hardware.md for complete wiring guide
 
 dut:
   type: physical
-  port: /dev/ttyACM0  # Adjust for your system
+  port: /dev/cu.usbmodem11103  # Nucleo ST-LINK serial (macOS), Linux: /dev/ttyACM0
   baudrate: 115200
 
 instrument:
-  type: rigol_dp832
-  visa_resource: "TCPIP0::192.168.1.100::5555::SOCKET"  # Adjust IP address
-  channel: 1  # Power supply channel to use
-  current_limit: 0.1  # 100mA safety limit
+  type: physical
+  
+  power_supply:
+    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Adjust IP address
+    channel: 3  # Power supply channel to use
+    current_limit: 0.1  # 100mA safety limit
+  
+  mux:
+    port: /dev/cu.usbmodem101  # KB2040 serial port - adjust for your system (Linux: /dev/ttyACM1, macOS: /dev/cu.usbmodem101)
+    baudrate: 115200
+
+# Number of ADC channels available (15 channels: 0-14)
+num_channels: 15
 
 tests:
   - test_read_initial_registers

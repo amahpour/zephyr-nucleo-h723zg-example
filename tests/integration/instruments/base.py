@@ -24,7 +24,7 @@ class InstrumentBase(ABC):
         Set output voltage on a channel.
 
         Args:
-            channel: ADC channel number (0-3)
+            channel: ADC channel number (0-14 for hardware, configurable for virtual)
             voltage_mv: Voltage in millivolts
         """
         pass

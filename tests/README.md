@@ -58,7 +58,7 @@ pip install -r tests/integration/requirements.txt
 source ~/zephyrproject/.venv/bin/activate
 export ZEPHYR_BASE=~/zephyrproject/zephyr
 cd ~/code/zephyr-nucleo-h723zg-example
-west build -b qemu_x86 app -d build-qemu
+west build -b qemu_x86 app -d build-qemu --pristine
 
 # Run integration tests
 PYTHONPATH=tests/integration pytest tests/integration/ \

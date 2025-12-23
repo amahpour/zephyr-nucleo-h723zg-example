@@ -9,7 +9,7 @@
         compatible = "zephyr,adc-emul";
         status = "okay";
         #io-channel-cells = <1>;
-        nchannels = <4>;
+        nchannels = <15>;
         ref-internal-mv = <3300>;
     };
 };

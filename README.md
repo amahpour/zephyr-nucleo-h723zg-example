@@ -51,8 +51,8 @@ ADC Register File:
   seq:       5
   timestamp: 500 ms
   channels:
-    ch[0]: 1650 mV
-    ch[1]: 1650 mV
+    ch[0]: 0 mV
+    ch[1]: 0 mV
 
 uart:~$ adcset 0 2500
 Set ch[0] = 2500 mV
@@ -65,6 +65,31 @@ Set ch[0] = 2500 mV
 | `Ctrl+A` then `X` | Exit QEMU |
 | `Ctrl+A` then `C` | QEMU monitor |
 | `Ctrl+A` then `H` | Help |
+
+## Integration Tests
+
+Run automated tests against virtual (QEMU) or physical hardware.
+
+### Setup
+
+```bash
+cd tests/integration
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Run Tests
+
+```bash
+# Virtual (QEMU) - start QEMU first, then:
+pytest test_adc.py --config=configs/virtual.yaml -v
+
+# Physical hardware (Nucleo + Rigol DP832 + KB2040 mux):
+pytest test_adc.py --config=configs/physical.yaml -v
+```
+
+See [Hardware Setup](docs/hardware.md) for physical test wiring guide.
 
 ## More Documentation
 

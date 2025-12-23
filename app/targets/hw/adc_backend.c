@@ -33,27 +33,68 @@
 LOG_MODULE_REGISTER(adc_backend_hw, LOG_LEVEL_INF);
 
 /*
- * TODO: Define the ADC device node label once hardware is configured.
+ * ADC channel mapping for 15-channel mux setup:
+ * Channel 0-14 map to mux outputs C0-C14
  *
- * Example for STM32:
- *   #define ADC_NODE DT_NODELABEL(adc1)
+ * ADC1 channels: INP3, INP5, INP9, INP10, INP15, INP16, INP18, INP19 (8 channels)
+ * ADC3 channels: INP0, INP1, INP4, INP5, INP6, INP8, INP9 (7 channels)
  *
- * You may also need a devicetree overlay for your specific pin mapping.
+ * NOTE: PC2 and PC3 are PC2_C/PC3_C pins that only connect to ADC3!
  */
 
-/* Placeholder: set to 1 when ADC is properly configured */
-#define ADC_CONFIGURED 0
+#define ADC_CONFIGURED 1
 
 #if ADC_CONFIGURED
 
-#define ADC_NODE DT_NODELABEL(adc1)
+#define ADC1_NODE DT_NODELABEL(adc1)
+#define ADC3_NODE DT_NODELABEL(adc3)
 
-static const struct device *adc_dev;
+static const struct device *adc1_dev;
+static const struct device *adc3_dev;
 static struct adc_channel_cfg channel_cfgs[NUM_CH];
 static int16_t sample_buffer[NUM_CH];
 
 #define ADC_RESOLUTION 12
 #define ADC_REF_MV     3300
+
+/* Map software channel (0-14) to ADC peripheral and hardware channel ID */
+struct channel_map {
+    const struct device **dev;  /* Pointer to ADC device */
+    uint8_t channel_id;          /* Hardware ADC channel ID */
+};
+
+static struct channel_map channel_mappings[NUM_CH] = {
+    /* C0: PA3 -> ADC1_INP15 */
+    { &adc1_dev, 15 },
+    /* C1: PC0 -> ADC1_INP10 */
+    { &adc1_dev, 10 },
+    /* C2: PC3 -> ADC3_INP1 (PC3_C is ADC3 only!) */
+    { &adc3_dev, 1 },
+    /* C3: PB1 -> ADC1_INP5 */
+    { &adc1_dev, 5 },
+    /* C4: PC2 -> ADC3_INP0 (PC2_C is ADC3 only!) */
+    { &adc3_dev, 0 },
+    /* C5: PF10 -> ADC3_INP6 */
+    { &adc3_dev, 6 },
+    /* C6: PA5 -> ADC1_INP19 */
+    { &adc1_dev, 19 },
+    /* C7: PA6 -> ADC1_INP3 */
+    { &adc1_dev, 3 },
+    /* C8: PA4 -> ADC1_INP18 */
+    { &adc1_dev, 18 },
+    /* C9: PF3 -> ADC3_INP5 */
+    { &adc3_dev, 5 },
+    /* C10: PF4 -> ADC3_INP9 */
+    { &adc3_dev, 9 },
+    /* C11: PF5 -> ADC3_INP4 */
+    { &adc3_dev, 4 },
+    /* C12: PF6 -> ADC3_INP8 */
+    { &adc3_dev, 8 },
+    /* C13: PA0 -> ADC1_INP16 */
+    { &adc1_dev, 16 },
+    /* C14: PB0 -> ADC1_INP9 */
+    { &adc1_dev, 9 },
+};
 
 #endif /* ADC_CONFIGURED */
 
@@ -62,37 +103,40 @@ int adc_backend_init(void)
 #if ADC_CONFIGURED
     int ret;
 
-    adc_dev = DEVICE_DT_GET(ADC_NODE);
-    if (!device_is_ready(adc_dev)) {
-        LOG_ERR("ADC device not ready");
+    /* Initialize ADC1 */
+    adc1_dev = DEVICE_DT_GET(ADC1_NODE);
+    if (!device_is_ready(adc1_dev)) {
+        LOG_ERR("ADC1 device not ready");
         return -ENODEV;
     }
 
-    /*
-     * TODO: Configure channels based on your wiring.
-     *
-     * Example:
-     *   channel_cfgs[0] = (struct adc_channel_cfg){
-     *       .gain = ADC_GAIN_1,
-     *       .reference = ADC_REF_INTERNAL,
-     *       .acquisition_time = ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 480),
-     *       .channel_id = 15,  // PA3 = ADC1_INP15
-     *   };
-     */
+    /* Initialize ADC3 */
+    adc3_dev = DEVICE_DT_GET(ADC3_NODE);
+    if (!device_is_ready(adc3_dev)) {
+        LOG_ERR("ADC3 device not ready");
+        return -ENODEV;
+    }
 
+    /* Configure all channels */
     for (int i = 0; i < NUM_CH; i++) {
         channel_cfgs[i] = (struct adc_channel_cfg){
             .gain = ADC_GAIN_1,
-            .reference = ADC_REF_INTERNAL,
-            .acquisition_time = ADC_ACQ_TIME_DEFAULT,
-            .channel_id = i,  /* TODO: Map to actual hardware channels */
+            .reference = ADC_REF_INTERNAL,  /* STM32 uses VREF+ pin (3.3V) */
+            .acquisition_time = ADC_ACQ_TIME_DEFAULT,  /* Use driver default */
+            .channel_id = channel_mappings[i].channel_id,
+            .differential = 0,  /* Single-ended mode */
         };
 
-        ret = adc_channel_setup(adc_dev, &channel_cfgs[i]);
+        /* Setup channel on the appropriate ADC device */
+        ret = adc_channel_setup(*channel_mappings[i].dev, &channel_cfgs[i]);
         if (ret < 0) {
-            LOG_ERR("Failed to setup channel %d: %d", i, ret);
+            LOG_ERR("Failed to setup channel %d (ADC channel %d): %d", 
+                    i, channel_mappings[i].channel_id, ret);
             return ret;
         }
+        LOG_INF("Channel %d setup OK: ADC%d ch%d", i, 
+                (channel_mappings[i].dev == &adc1_dev) ? 1 : 3,
+                channel_mappings[i].channel_id);
     }
 
     LOG_INF("ADC backend (HW) initialized with %d channels", NUM_CH);
@@ -118,9 +162,11 @@ int adc_backend_sample_all(int32_t out_mv[NUM_CH])
             .channels = BIT(channel_cfgs[i].channel_id),
         };
 
-        ret = adc_read(adc_dev, &sequence);
+        /* Read from the appropriate ADC device */
+        ret = adc_read(*channel_mappings[i].dev, &sequence);
         if (ret < 0) {
-            LOG_ERR("ADC read failed for channel %d: %d", i, ret);
+            LOG_ERR("ADC read failed for channel %d (ADC channel %d): %d", 
+                    i, channel_cfgs[i].channel_id, ret);
             out_mv[i] = 0;
         } else {
             int32_t raw = sample_buffer[i];
