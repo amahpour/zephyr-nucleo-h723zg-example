@@ -1,9 +1,0 @@
-# Additional dependencies for physical hardware testing
-# Install after base requirements: pip install -r requirements-physical.txt
-
-# Rigol DP832 power supply control
-rigol-dp832 @ git+https://github.com/amahpour/rigol_dp832_mcp_server.git
-
-# KB2040 mux controller
-cd74hc4067-mux-controller @ git+https://github.com/amahpour/KB2040-CD74HCx4067-controller.git#subdirectory=python
-
