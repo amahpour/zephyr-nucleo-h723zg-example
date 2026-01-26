@@ -205,6 +205,85 @@ ls /dev/ttyACM*
 screen /dev/ttyACM0 115200
 ```
 
+## Identifying Device Ports by VID/PID
+
+When multiple USB devices are connected, you can identify which serial port corresponds to which device using USB Vendor ID (VID) and Product ID (PID).
+
+### List Connected USB Devices
+
+```bash
+# Show all USB devices with VID:PID
+lsusb
+```
+
+Expected output for NUCLEO-H723ZG setup:
+```
+Bus 001 Device 002: ID 0483:374e STMicroelectronics STLINK-V3
+Bus 001 Device 003: ID 239a:8105 Adafruit KB2040
+```
+
+### Map Serial Ports to USB Devices
+
+**Linux:**
+
+```bash
+# For each serial port, check its VID/PID
+udevadm info -q path -n /dev/ttyACM0 | xargs udevadm info -p | grep -E "ID_VENDOR=|ID_MODEL=|ID_USB_VENDOR_ID=|ID_USB_MODEL_ID="
+udevadm info -q path -n /dev/ttyACM1 | xargs udevadm info -p | grep -E "ID_VENDOR=|ID_MODEL=|ID_USB_VENDOR_ID=|ID_USB_MODEL_ID="
+```
+
+**macOS:**
+
+```bash
+# List serial ports with device info
+ioreg -p IOUSB -l -w 0 | grep -E "@|idVendor|idProduct|IODialinDevice"
+```
+
+### Device VID/PID Reference
+
+| Device | VID | PID | Port (Linux) | Port (macOS) |
+|--------|-----|-----|--------------|--------------|
+| ST-LINK V2 | 0483 | 3748 | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+| ST-LINK V2-1 | 0483 | 374b | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+| ST-LINK V3 | 0483 | 374e | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+| ST-LINK V3 (alt) | 0483 | 374f | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+| Adafruit KB2040 | 239a | 8105 | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+
+### Finding Rigol DP832 IP Address
+
+For the Rigol DP832 power supply connected via network:
+
+```bash
+# Check if the configured IP is reachable
+ping -c 1 192.168.68.109
+
+# Or scan your network subnet (adjust subnet as needed)
+nmap -sn 192.168.68.0/24 | grep -B 2 "Rigol\|DP832"
+```
+
+The IP address should be configured on the Rigol DP832's front panel: **Utility → I/O Config → LAN Settings**.
+
+### Updating Test Configuration
+
+Once you've identified the correct ports and IP addresses, update `tests/integration/configs/physical.yaml`:
+
+```yaml
+dut:
+  type: physical
+  port: /dev/ttyACM0  # Nucleo ST-LINK (VID:0483 PID:374e)
+  baudrate: 115200
+
+instrument:
+  type: physical
+  power_supply:
+    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Rigol DP832 IP
+    channel: 3
+    current_limit: 0.1
+  mux:
+    port: /dev/ttyACM1  # KB2040 (VID:239a PID:8105)
+    baudrate: 115200
+```
+
 ## Differences from Simulator
 
 - `adcset` command does **not exist** on hardware builds

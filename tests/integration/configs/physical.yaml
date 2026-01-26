@@ -17,19 +17,19 @@
 
 dut:
   type: physical
-  port: /dev/cu.usbmodem11103  # Nucleo ST-LINK serial (macOS), Linux: /dev/ttyACM0
+  port: /dev/ttyACM0  # Nucleo ST-LINK serial (VID:0483 PID:374e STLINK-V3)
   baudrate: 115200
 
 instrument:
   type: physical
   
   power_supply:
-    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Adjust IP address
+    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Rigol DP832 power supply
     channel: 3  # Power supply channel to use
     current_limit: 0.1  # 100mA safety limit
   
   mux:
-    port: /dev/cu.usbmodem101  # KB2040 serial port - adjust for your system (Linux: /dev/ttyACM1, macOS: /dev/cu.usbmodem101)
+    port: /dev/ttyACM1  # KB2040 serial port (VID:239a PID:8105 Adafruit KB2040)
     baudrate: 115200
 
 # Number of ADC channels available (15 channels: 0-14)

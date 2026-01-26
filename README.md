@@ -27,6 +27,8 @@ Or follow the full [Zephyr Getting Started Guide](https://docs.zephyrproject.org
 
 ## Build and Run
 
+### QEMU (Simulator)
+
 ```bash
 source ~/zephyrproject/.venv/bin/activate
 export ZEPHYR_BASE=~/zephyrproject/zephyr
@@ -36,12 +38,54 @@ west build -b qemu_x86 app --pristine
 west build -t run
 ```
 
+### Physical Hardware (NUCLEO-H723ZG)
+
+**Prerequisites:**
+- Install OpenOCD: `sudo apt install openocd`
+- Set up USB permissions (see [Hardware Setup](docs/hardware.md))
+- Connect the board via USB
+
+**Build and Flash:**
+
+```bash
+source ~/zephyrproject/.venv/bin/activate
+export ZEPHYR_BASE=~/zephyrproject/zephyr
+
+cd ~/code/zephyr-nucleo-h723zg-example
+west build -b nucleo_h723zg app --pristine
+west flash --runner openocd
+```
+
+**Connect via Serial:**
+
+```bash
+# Find the serial port
+# Linux: ls /dev/ttyACM* or ls /dev/ttyUSB*
+# macOS: ls /dev/cu.usbmodem*
+# Windows: Check Device Manager for COM port
+
+# Connect (replace with your actual port)
+screen /dev/ttyACM0 115200
+# or
+minicom -D /dev/ttyACM0 -b 115200
+```
+
+**Tip:** If you have multiple USB devices, identify ports by VID/PID using `lsusb` and `udevadm` (Linux) or `ioreg` (macOS). See [Hardware Setup](docs/hardware.md#identifying-device-ports-by-vidpid) for details.
+
+For 15-channel ADC configuration with mux:
+```bash
+west build -b nucleo_h723zg app --pristine -- -DCONFIG_APP_NUM_CH=15
+west flash --runner openocd
+```
+
+See [Hardware Setup](docs/hardware.md) for complete hardware configuration and wiring guide.
+
 ## Shell Commands
 
 | Command | Description |
 |---------|-------------|
 | `adcregs` | Show ADC register values |
-| `adcset <ch> <mv>` | Inject ADC value (simulator only) |
+| `adcset <ch> <mv>` | Inject ADC value (QEMU simulator only, not available on hardware) |
 | `help` | List all commands |
 
 Example:
