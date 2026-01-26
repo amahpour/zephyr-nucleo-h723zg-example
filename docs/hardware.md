@@ -251,17 +251,28 @@ ioreg -p IOUSB -l -w 0 | grep -E "@|idVendor|idProduct|IODialinDevice"
 
 ### Finding Rigol DP832 IP Address
 
-For the Rigol DP832 power supply connected via network:
+To find the IP address of the Rigol DP832 power supply:
 
-```bash
-# Check if the configured IP is reachable
-ping -c 1 192.168.68.109
+**On the Rigol DP832 front panel:**
+1. Press **Utility** button
+2. Navigate to **I/O Config → LAN Settings**
+3. The IP address will be displayed
 
-# Or scan your network subnet (adjust subnet as needed)
-nmap -sn 192.168.68.0/24 | grep -B 2 "Rigol\|DP832"
+**Alternative methods:**
+- Check your router's DHCP client list for a device named "RIGOL" or "DP832"
+- Scan your network: `nmap -sn 192.168.68.0/24 | grep -B 2 "Rigol\|DP832"`
+
+Once you have the IP address, update it in `tests/integration/configs/physical.yaml`:
+```yaml
+power_supply:
+  visa_resource: "TCPIP::<YOUR_IP_HERE>::INSTR"
 ```
 
-The IP address should be configured on the Rigol DP832's front panel: **Utility → I/O Config → LAN Settings**.
+**Alternative: Network scan (if device name is visible):**
+```bash
+# Scan network and look for Rigol hostname
+nmap -sn 192.168.68.0/24 | grep -B 2 "Rigol\|DP832"
+```
 
 ### Updating Test Configuration
 

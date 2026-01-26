@@ -24,7 +24,10 @@ instrument:
   type: physical
   
   power_supply:
-    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Rigol DP832 power supply
+    visa_resource: "TCPIP::192.168.68.135::INSTR"  # Rigol DP832 power supply
+    # NOTE: IP address needs verification - device responds to ping but SCPI port 5025 not accessible
+    # Verify on Rigol front panel: Utility → I/O Config → LAN Settings
+    # Then test with: python3 -c "import pyvisa; rm=pyvisa.ResourceManager(); inst=rm.open_resource('TCPIP::192.168.68.109::INSTR'); print(inst.query('*IDN?'))"
     channel: 3  # Power supply channel to use
     current_limit: 0.1  # 100mA safety limit
   
