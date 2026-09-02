@@ -2,6 +2,7 @@
 QEMU-based DUT with automatic PTY detection.
 """
 
+import glob
 import os
 import re
 import subprocess
@@ -37,17 +38,54 @@ class QEMUDevice(DUTBase):
         self._serial: serial.Serial = None
         self._pty_path: str = None
 
+    # Zephyr SDK host-tool layouts. SDK 1.0 moved everything under hosttools/,
+    # so both have to be probed or the suite breaks on an SDK upgrade.
+    _QEMU_RELPATHS = (
+        "hosttools/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-i386",  # SDK >= 1.0
+        "sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-i386",            # SDK <  1.0
+    )
+
+    @staticmethod
+    def _version_key(path: str):
+        """Sort ~/zephyr-sdk-<ver> numerically, so 1.0.1 beats 0.17.4."""
+        m = re.search(r"zephyr-sdk-(.+)$", path)
+        if not m:
+            return ()
+        parts = []
+        for chunk in m.group(1).split("."):
+            parts.append(int(chunk) if chunk.isdigit() else -1)
+        return tuple(parts)
+
+    def _candidate_sdk_roots(self) -> list:
+        """SDK roots to probe, most preferred first."""
+        if self._zephyr_sdk_path:
+            return [self._zephyr_sdk_path]
+
+        env = os.environ.get("ZEPHYR_SDK_INSTALL_DIR")
+        if env:
+            return [env]
+
+        # Discover rather than hardcode a version: the SDK moves independently
+        # of this repo, and pinning it here silently rots.
+        roots = glob.glob(os.path.expanduser("~/zephyr-sdk-*"))
+        return sorted(roots, key=self._version_key, reverse=True)
+
     def _find_qemu_binary(self) -> str:
-        """Find the QEMU binary path."""
-        zephyr_sdk = self._zephyr_sdk_path or os.environ.get(
-            "ZEPHYR_SDK_INSTALL_DIR", os.path.expanduser("~/zephyr-sdk-0.17.4")
+        """Find the QEMU binary shipped with the Zephyr SDK."""
+        tried = []
+
+        for root in self._candidate_sdk_roots():
+            for relpath in self._QEMU_RELPATHS:
+                candidate = os.path.join(root, relpath)
+                tried.append(candidate)
+                if os.path.exists(candidate):
+                    return candidate
+
+        raise FileNotFoundError(
+            "QEMU binary not found in any Zephyr SDK.\n"
+            "Tried:\n  " + "\n  ".join(tried or ["(no ~/zephyr-sdk-* directories)"]) + "\n"
+            "Set ZEPHYR_SDK_INSTALL_DIR, or set dut.zephyr_sdk_path in the config file."
         )
-        qemu_bin = f"{zephyr_sdk}/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-i386"
-
-        if not os.path.exists(qemu_bin):
-            raise FileNotFoundError(f"QEMU binary not found at {qemu_bin}")
-
-        return qemu_bin
 
     def _find_kernel(self) -> Path:
         """Find the kernel ELF file."""
