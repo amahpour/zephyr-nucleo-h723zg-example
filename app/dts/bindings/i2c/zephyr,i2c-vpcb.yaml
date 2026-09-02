@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Virtual PCB I2C controller. Forwards transactions out of the process to a
+  separate board process over a Unix socket, where the IC models run as their
+  own OS processes.
+
+compatible: "zephyr,i2c-vpcb"
+
+include: i2c-controller.yaml

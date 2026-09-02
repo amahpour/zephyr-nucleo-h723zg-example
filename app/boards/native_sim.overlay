@@ -1,0 +1,29 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Virtual PCB topology.
+ *
+ * The I2C bus leaves the process: transactions are forwarded to a separate
+ * board process where the IC models run as their own OS processes.
+ *
+ * The ADC is internal to the MCU, so it stays in-process. native_sim already
+ * provides an adc_emul instance at &adc0; widen it to the 15 channels this
+ * application samples and give it the 3.3 V reference the DAC full-scale is
+ * matched to.
+ */
+
+/ {
+    vpcb_i2c: i2c-vpcb {
+        compatible = "zephyr,i2c-vpcb";
+        status = "okay";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        clock-frequency = <100000>;
+    };
+};
+
+&adc0 {
+    nchannels = <15>;
+    ref-internal-mv = <3300>;
+    status = "okay";
+};
