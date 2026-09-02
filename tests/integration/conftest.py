@@ -50,6 +50,17 @@ def create_dut(dut_config: dict):
             boot_timeout=dut_config.get("boot_timeout", 5.0),
             zephyr_sdk_path=dut_config.get("zephyr_sdk_path"),
         )
+    elif dut_type == "native_sim":
+        # Import here to avoid dependency when not needed
+        from devices.native_sim import NativeSimDevice
+
+        return NativeSimDevice(
+            binary=dut_config.get("binary"),
+            vpcb_dir=dut_config.get("vpcb_dir"),
+            netlist=dut_config.get("netlist"),
+            dacs=dut_config.get("dacs"),
+            boot_timeout=dut_config.get("boot_timeout", 10.0),
+        )
     elif dut_type == "physical":
         # Import here to avoid dependency when not needed
         from devices.physical import PhysicalDevice
@@ -68,6 +79,11 @@ def create_instrument(instrument_config: dict, dut):
 
     if inst_type == "virtual":
         return VirtualInstrument(dut)
+    elif inst_type == "vpcb":
+        # Import here to avoid dependency when not needed
+        from instruments.vpcb import VpcbInstrument
+
+        return VpcbInstrument(dut)
     elif inst_type == "physical":
         # Import here to avoid dependency when not needed
         from instruments.physical import PhysicalInstrument
