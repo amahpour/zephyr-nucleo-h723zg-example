@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How a DAC write crosses three OS processes and returns as an ADC reading in a Zephyr native_sim virtual PCB - and what happens when the chip isn't there.">
+<meta name="color-scheme" content="light dark">
+
+<style>
+  html { color-scheme: light dark; }
+  img, svg { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Virtual PCB Test Loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --ground:      #F7F6F2;
+  --surface:     #FFFFFF;
+  --surface-2:   #EFEDE6;
+  --ink:         #1A1D1C;
+  --ink-2:       #575D5A;
+  --ink-3:       #838884;
+  --rule:        #DCDAD1;
+  --rule-strong: #BFBCB0;
+  --copper:      #B4552D;
+  --copper-soft: #F0E2D9;
+  --slate:       #3D5A6C;
+  --oxide:       #9B2C2C;
+  --oxide-soft:  #F5E3E1;
+  --green:       #3F6B4A;
+
+  --sans:  "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono:  "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #15181A;
+    --surface:     #1C2023;
+    --surface-2:   #23282B;
+    --ink:         #E9E7E1;
+    --ink-2:       #A8ADA9;
+    --ink-3:       #7C817E;
+    --rule:        #2F3538;
+    --rule-strong: #454C50;
+    --copper:      #E08A5F;
+    --copper-soft: #3A2A22;
+    --slate:       #8FB4C8;
+    --oxide:       #E88585;
+    --oxide-soft:  #3A2223;
+    --green:       #7FB08C;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #15181A;
+  --surface:     #1C2023;
+  --surface-2:   #23282B;
+  --ink:         #E9E7E1;
+  --ink-2:       #A8ADA9;
+  --ink-3:       #7C817E;
+  --rule:        #2F3538;
+  --rule-strong: #454C50;
+  --copper:      #E08A5F;
+  --copper-soft: #3A2A22;
+  --slate:       #8FB4C8;
+  --oxide:       #E88585;
+  --oxide-soft:  #3A2223;
+  --green:       #7FB08C;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.62;
+  margin: 0;
+  padding: 0 24px 96px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1120px; margin: 0 auto; }
+.col  { max-width: 660px; }
+
+/* ---------- masthead ---------- */
+header.masthead {
+  padding: 56px 0 34px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 40px;
+}
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--copper);
+  margin: 0 0 14px;
+}
+h1 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(34px, 5.2vw, 52px);
+  line-height: 1.04;
+  letter-spacing: -.022em;
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+.standfirst {
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  margin: 0;
+  max-width: 640px;
+}
+
+/* ---------- facts strip ---------- */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  margin: 0 0 52px;
+}
+.fact { padding: 18px 20px; border-right: 1px solid var(--rule); }
+.fact:last-child { border-right: none; }
+.fact dt {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 6px;
+}
+.fact dd {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 500;
+  margin: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- sections ---------- */
+section { margin: 0 0 60px; }
+h2 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 27px;
+  letter-spacing: -.014em;
+  margin: 0 0 6px;
+  text-wrap: balance;
+}
+h2 + .deck {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink-3);
+  margin: 0 0 26px;
+}
+h3 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -.006em;
+  margin: 30px 0 8px;
+}
+p { margin: 0 0 16px; }
+.col p:last-child { margin-bottom: 0; }
+code {
+  font-family: var(--mono);
+  font-size: .87em;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+strong { font-weight: 600; }
+
+/* ---------- figures ---------- */
+figure {
+  margin: 30px 0 34px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+.figbody { overflow-x: auto; padding: 22px 20px 8px; }
+figure svg { display: block; max-width: 100%; height: auto; min-width: 620px; margin: 0 auto; }
+figcaption {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--rule);
+  background: var(--surface-2);
+}
+figcaption b { color: var(--ink); font-weight: 600; }
+
+/* ---------- terminal ---------- */
+.term {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.72;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--copper);
+  padding: 16px 18px;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 18px 0 22px;
+  color: var(--ink-2);
+}
+.term .p  { color: var(--green); font-weight: 500; }
+.term .o  { color: var(--ink); }
+.term .e  { color: var(--oxide); }
+.term .c  { color: var(--ink-3); }
+.term .hl { color: var(--copper); font-weight: 700; }
+
+/* ---------- results table ---------- */
+.tablewrap { overflow-x: auto; margin: 22px 0; }
+table { border-collapse: collapse; width: 100%; min-width: 540px; font-family: var(--sans); font-size: 14px; }
+th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 0 14px 9px 0;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+td {
+  padding: 11px 14px 11px 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: baseline;
+}
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.pill {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  padding: 2px 8px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.pill.ok   { background: var(--copper-soft); color: var(--copper); }
+.pill.nak  { background: var(--oxide-soft);  color: var(--oxide); }
+
+/* ---------- notes ---------- */
+.note {
+  border-left: 2px solid var(--rule-strong);
+  padding: 2px 0 2px 18px;
+  margin: 22px 0;
+  color: var(--ink-2);
+  font-size: 16px;
+}
+.note b { color: var(--ink); }
+
+ul.tight { margin: 0 0 16px; padding-left: 20px; }
+ul.tight li { margin-bottom: 7px; }
+
+footer {
+  border-top: 1px solid var(--rule);
+  padding-top: 20px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 640px) {
+  body { padding: 0 16px 64px; font-size: 16px; }
+  header.masthead { padding-top: 38px; }
+  .fact { border-right: none; border-bottom: 1px solid var(--rule); }
+  .fact:last-child { border-bottom: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Zephyr · native_sim · co-simulation</p>
+  <h1>Virtual PCB Test Loop</h1>
+  <p class="standfirst">A DAC write leaves the firmware process, crosses a Unix socket, lands in a chip model running as its own program, and comes back as an ADC reading — 1998&nbsp;mV, through three processes.</p>
+</header>
+
+<dl class="facts">
+  <div class="fact"><dt>OS processes</dt><dd>3</dd></div>
+  <div class="fact"><dt>Build systems</dt><dd>2</dd></div>
+  <div class="fact"><dt>Shared header</dt><dd>1</dd></div>
+  <div class="fact"><dt>Round trip</dt><dd>1998 mV</dd></div>
+  <div class="fact"><dt>Chip absent</dt><dd>−19 ENODEV</dd></div>
+</dl>
+
+<section>
+  <div class="col">
+    <h2>The loop</h2>
+    <p class="deck">What happens between <code>dacset 0 2000</code> and <code>adcregs</code></p>
+    <p>The firmware never sees the DAC. It writes three bytes to an I²C address, and everything past that address lives in a different program with a different address space. The value only returns because a separate board process holds the netlist that says which DAC channel is soldered to which ADC pin.</p>
+  </div>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 1060 500" role="img" aria-label="Six-hop loop: the firmware process sends an I2C transfer across a Unix socket to the board process, which routes it by address to a DAC model process; the DAC drives a net back to the board, the board acknowledges the write, and the firmware's ADC later samples that net through the same socket.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--copper)"/>
+          </marker>
+        </defs>
+
+        <!-- process boundaries -->
+        <line x1="358" y1="16" x2="358" y2="452" stroke="var(--slate)" stroke-width="1.5" stroke-dasharray="5 5"/>
+        <line x1="698" y1="16" x2="698" y2="452" stroke="var(--slate)" stroke-width="1.5" stroke-dasharray="5 5"/>
+        <text x="358" y="474" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--slate)">AF_UNIX socket</text>
+        <text x="698" y="474" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--slate)">AF_UNIX socket</text>
+
+        <!-- MCU process -->
+        <rect x="24" y="30" width="292" height="410" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="42" y="58" font-family="var(--mono)" font-size="15" font-weight="700" fill="currentColor">zephyr.exe</text>
+        <text x="42" y="78" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">native_sim · the MCU</text>
+        <line x1="24" y1="92" x2="316" y2="92" stroke="var(--rule)" stroke-width="1"/>
+
+        <text x="42" y="122" font-family="var(--mono)" font-size="13" fill="currentColor">shell: dacset 0 2000</text>
+        <text x="42" y="142" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">i2c_write() → i2c_vpcb</text>
+
+        <text x="42" y="322" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">adc_emul value_func</text>
+        <text x="42" y="342" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">regs.mv[0]</text>
+        <text x="42" y="368" font-family="var(--mono)" font-size="13" fill="currentColor">shell: adcregs</text>
+        <text x="42" y="392" font-family="var(--mono)" font-size="15" font-weight="700" fill="var(--copper)">ch[0]: 1998 mV</text>
+
+        <!-- board process -->
+        <rect x="400" y="30" width="256" height="410" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="418" y="58" font-family="var(--mono)" font-size="15" font-weight="700" fill="currentColor">vpcb-board</text>
+        <text x="418" y="78" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">netlist · router</text>
+        <line x1="400" y1="92" x2="656" y2="92" stroke="var(--rule)" stroke-width="1"/>
+
+        <text x="418" y="122" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">route by addr</text>
+        <text x="418" y="258" font-family="var(--sans)" font-size="12" font-weight="600" fill="var(--ink-3)">NET TABLE</text>
+        <text x="418" y="280" font-family="var(--mono)" font-size="13" fill="var(--copper)">net0 = 1999340 µV</text>
+        <text x="418" y="300" font-family="var(--mono)" font-size="12" fill="var(--ink-3)">net1..14 = 0</text>
+
+        <!-- IC processes -->
+        <rect x="740" y="30" width="296" height="196" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="758" y="58" font-family="var(--mono)" font-size="15" font-weight="700" fill="currentColor">vpcb-dac7578</text>
+        <text x="758" y="78" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">I²C 0x48 · channels 0–7</text>
+        <line x1="740" y1="92" x2="1036" y2="92" stroke="var(--rule)" stroke-width="1"/>
+        <text x="758" y="120" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">CA 0x30 → cmd 3, ch 0</text>
+        <text x="758" y="142" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">code = 2481 (12-bit)</text>
+        <text x="758" y="164" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">×2 buffer, VREF 1.65 V</text>
+        <text x="758" y="192" font-family="var(--mono)" font-size="14" font-weight="700" fill="var(--copper)">VOUT = 1999340 µV</text>
+
+        <rect x="740" y="256" width="296" height="184" fill="none" stroke="var(--rule-strong)" stroke-width="1.5"/>
+        <text x="758" y="284" font-family="var(--mono)" font-size="15" font-weight="700" fill="var(--ink-3)">vpcb-dac7578</text>
+        <text x="758" y="304" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">I²C 0x4c · channels 8–14</text>
+        <line x1="740" y1="318" x2="1036" y2="318" stroke="var(--rule)" stroke-width="1"/>
+        <text x="758" y="346" font-family="var(--mono)" font-size="13" fill="var(--ink-3)">idle this transaction</text>
+        <text x="758" y="368" font-family="var(--mono)" font-size="12" fill="var(--ink-3)">ch7 → not in netlist,</text>
+        <text x="758" y="386" font-family="var(--mono)" font-size="12" fill="var(--ink-3)">dropped (16th unused)</text>
+
+        <!-- hop 1 -->
+        <line x1="316" y1="150" x2="400" y2="150" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar)"/>
+        <circle cx="330" cy="132" r="9" fill="var(--copper)"/>
+        <text x="330" y="136" text-anchor="middle" font-family="var(--sans)" font-size="11" font-weight="700" fill="var(--ground)">1</text>
+        <text x="348" y="136" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--copper)">30 9B 10</text>
+
+        <!-- hop 2 -->
+        <line x1="656" y1="150" x2="740" y2="150" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar)"/>
+        <circle cx="670" cy="132" r="9" fill="var(--copper)"/>
+        <text x="670" y="136" text-anchor="middle" font-family="var(--sans)" font-size="11" font-weight="700" fill="var(--ground)">2</text>
+        <text x="700" y="136" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--copper)">→ 0x48</text>
+
+        <!-- hop 3 : IC drives net, arrives BEFORE the reply -->
+        <line x1="740" y1="212" x2="656" y2="212" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar)"/>
+        <circle cx="726" cy="230" r="9" fill="var(--copper)"/>
+        <text x="726" y="234" text-anchor="middle" font-family="var(--sans)" font-size="11" font-weight="700" fill="var(--ground)">3</text>
+        <text x="690" y="234" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--copper)">NET_SET</text>
+
+        <!-- hop 4 : reply closes the write -->
+        <line x1="400" y1="212" x2="316" y2="212" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar)"/>
+        <circle cx="386" cy="230" r="9" fill="var(--copper)"/>
+        <text x="386" y="234" text-anchor="middle" font-family="var(--sans)" font-size="11" font-weight="700" fill="var(--ground)">4</text>
+        <text x="348" y="234" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--copper)">REPLY OK</text>
+
+        <!-- hop 5 -->
+        <line x1="316" y1="336" x2="400" y2="336" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar)"/>
+        <circle cx="330" cy="318" r="9" fill="var(--copper)"/>
+        <text x="330" y="322" text-anchor="middle" font-family="var(--sans)" font-size="11" font-weight="700" fill="var(--ground)">5</text>
+        <text x="352" y="322" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--copper)">NET_GET</text>
+
+        <!-- hop 6 -->
+        <line x1="400" y1="392" x2="316" y2="392" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar)"/>
+        <circle cx="386" cy="410" r="9" fill="var(--copper)"/>
+        <text x="386" y="414" text-anchor="middle" font-family="var(--sans)" font-size="11" font-weight="700" fill="var(--ground)">6</text>
+        <text x="346" y="414" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--copper)">VALUE</text>
+      </svg>
+    </div>
+    <figcaption><b>Figure 1 — the six hops.</b> Dashed verticals are OS process boundaries; every copper arrow is a message on a Unix socket. Hops&nbsp;1–4 are the write; hops&nbsp;5–6 are the sampling thread reading the net 100&nbsp;ms later. Note that <b>hop&nbsp;3 arrives before hop&nbsp;4</b> — the chip drives its output before acknowledging the write, which is exactly the ordering that broke the first version of the board.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="col">
+    <h2>Inside the firmware process</h2>
+    <p class="deck">Where Zephyr ends and the host begins</p>
+    <p>The socket call cannot live in ordinary Zephyr code — Zephyr's headers and libc collide with the host's. native_sim resolves this by compiling designated files in a separate <em>host</em> context, so the driver is split in two halves that never share a compilation unit.</p>
+  </div>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 900 400" role="img" aria-label="Layer stack inside the firmware process: application code calls the Zephyr I2C and ADC APIs, which reach the i2c_vpcb top half compiled with Zephyr headers; below a compile-context boundary the bottom half is compiled with host headers and owns the socket.">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--copper)"/>
+          </marker>
+        </defs>
+
+        <!-- app row -->
+        <rect x="60" y="24" width="330" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="225" y="48" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="currentColor">targets/vpcb/cmd_dac.c</text>
+        <text x="225" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">dacset — writes the DAC</text>
+
+        <rect x="510" y="24" width="330" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="675" y="48" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="currentColor">targets/vpcb/adc_backend.c</text>
+        <text x="675" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">sampling thread — reads the net</text>
+
+        <!-- API row -->
+        <rect x="60" y="118" width="330" height="48" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1"/>
+        <text x="225" y="147" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">Zephyr I²C API</text>
+
+        <rect x="510" y="118" width="330" height="48" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1"/>
+        <text x="675" y="147" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">adc_emul + value_func</text>
+
+        <line x1="225" y1="80" x2="225" y2="116" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
+        <line x1="675" y1="80" x2="675" y2="116" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
+
+        <!-- top half -->
+        <rect x="60" y="204" width="780" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="450" y="228" text-anchor="middle" font-family="var(--mono)" font-size="14" font-weight="700" fill="currentColor">i2c_vpcb.c — TOP</text>
+        <text x="450" y="248" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">Zephyr headers · Zephyr libc · no sockets allowed here</text>
+
+        <line x1="225" y1="166" x2="225" y2="202" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
+        <line x1="675" y1="166" x2="675" y2="202" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
+
+        <!-- compile boundary -->
+        <line x1="40" y1="286" x2="860" y2="286" stroke="var(--slate)" stroke-width="2" stroke-dasharray="7 5"/>
+        <text x="450" y="279" text-anchor="middle" font-family="var(--sans)" font-size="12" font-weight="600" fill="var(--slate)">compile-context boundary — target_sources(native_simulator INTERFACE …)</text>
+
+        <!-- bottom half -->
+        <rect x="60" y="304" width="780" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="450" y="328" text-anchor="middle" font-family="var(--mono)" font-size="14" font-weight="700" fill="currentColor">i2c_vpcb_bottom.c — BOTTOM</text>
+        <text x="450" y="348" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">host headers · socket() connect() poll() · wall-clock timeout</text>
+
+        <line x1="450" y1="360" x2="450" y2="392" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
+        <text x="470" y="386" font-family="var(--mono)" font-size="12" fill="var(--copper)">→ vpcb-board</text>
+      </svg>
+    </div>
+    <figcaption><b>Figure 2 — the top/bottom split.</b> Both halves link into the same <code>zephyr.exe</code>, but they are compiled against different header sets. The timeout lives in the bottom half deliberately: while the firmware blocks on this socket, native_sim's simulated clock is frozen, so a Zephyr-side timeout could never fire.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="col">
+    <h2>The test: chip present, chip absent</h2>
+    <p class="deck">Same firmware, same command, one process not started</p>
+    <p>This is the case a linked-in emulator cannot produce. Because the chip model is a separate program, removing it is not a code change or a mock — you simply don't launch it, and the bus behaves the way copper does when nothing acknowledges.</p>
+  </div>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 980 300" role="img" aria-label="Side-by-side comparison: with the DAC process running the write is acknowledged and the ADC reads 1998 millivolts; with the DAC process absent the board answers NAK and the firmware returns error 19, ENODEV, while the ADC still reads zero.">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--copper)"/>
+          </marker>
+          <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--oxide)"/>
+          </marker>
+        </defs>
+
+        <!-- ===== LEFT : present ===== -->
+        <text x="30" y="26" font-family="var(--sans)" font-size="13" font-weight="600" fill="var(--copper)">CHIP PRESENT</text>
+        <rect x="30" y="44" width="120" height="52" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="90" y="68" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="currentColor">zephyr.exe</text>
+        <text x="90" y="86" text-anchor="middle" font-family="var(--sans)" font-size="11" fill="var(--ink-3)">dacset 0 2000</text>
+
+        <rect x="196" y="44" width="104" height="52" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="248" y="74" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="currentColor">board</text>
+
+        <rect x="346" y="44" width="118" height="52" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="405" y="68" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="currentColor">dac7578</text>
+        <text x="405" y="86" text-anchor="middle" font-family="var(--sans)" font-size="11" fill="var(--ink-3)">running</text>
+
+        <line x1="150" y1="70" x2="194" y2="70" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar3)"/>
+        <line x1="300" y1="70" x2="344" y2="70" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar3)"/>
+
+        <path d="M405 96 L405 140 L248 140" fill="none" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar3)"/>
+        <text x="330" y="134" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="var(--copper)">NET_SET 1999340 µV</text>
+
+        <path d="M196 140 L90 140 L90 176" fill="none" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar3)"/>
+
+        <rect x="30" y="180" width="434" height="46" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="1"/>
+        <text x="48" y="209" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--copper)">adcregs → ch[0]: 1998 mV</text>
+
+        <text x="30" y="256" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">Write acknowledged. Value survives the round trip;</text>
+        <text x="30" y="274" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">the 2 mV is 12-bit quantisation, 1 LSB ≈ 0.806 mV.</text>
+
+        <!-- divider -->
+        <line x1="504" y1="14" x2="504" y2="286" stroke="var(--rule)" stroke-width="1"/>
+
+        <!-- ===== RIGHT : absent ===== -->
+        <text x="536" y="26" font-family="var(--sans)" font-size="13" font-weight="600" fill="var(--oxide)">CHIP ABSENT</text>
+        <rect x="536" y="44" width="120" height="52" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="596" y="68" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="currentColor">zephyr.exe</text>
+        <text x="596" y="86" text-anchor="middle" font-family="var(--sans)" font-size="11" fill="var(--ink-3)">dacset 0 2000</text>
+
+        <rect x="702" y="44" width="104" height="52" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="754" y="74" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="currentColor">board</text>
+
+        <rect x="852" y="44" width="118" height="52" fill="none" stroke="var(--oxide)" stroke-width="1.5" stroke-dasharray="6 4"/>
+        <text x="911" y="68" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="var(--oxide)">dac7578</text>
+        <text x="911" y="86" text-anchor="middle" font-family="var(--sans)" font-size="11" fill="var(--oxide)">not started</text>
+
+        <line x1="656" y1="70" x2="700" y2="70" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar3)"/>
+        <line x1="806" y1="70" x2="850" y2="70" stroke="var(--oxide)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="828" y="34" text-anchor="middle" font-family="var(--sans)" font-size="18" font-weight="700" fill="var(--oxide)">✕</text>
+
+        <path d="M702 96 L754 96 L754 140 L596 140 L596 176" fill="none" stroke="var(--oxide)" stroke-width="2" marker-end="url(#ar4)"/>
+        <text x="700" y="134" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="var(--oxide)">NAK — nothing answered</text>
+
+        <rect x="536" y="180" width="434" height="46" fill="var(--oxide-soft)" stroke="var(--oxide)" stroke-width="1"/>
+        <text x="554" y="209" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--oxide)">I²C write FAILED (−19) — did not ACK</text>
+
+        <text x="536" y="256" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">−19 is −ENODEV, produced by a real NAK crossing a</text>
+        <text x="536" y="274" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">real process boundary. ch[0] stays at 0 mV.</text>
+      </svg>
+    </div>
+    <figcaption><b>Figure 3 — the one edge that differs.</b> Everything is identical except whether the <code>vpcb-dac7578</code> process exists. The board owns address routing, so an unclaimed address is answered with NAK rather than silence — the firmware's error path runs for real, unmocked.</figcaption>
+  </figure>
+
+  <div class="col">
+    <h3>What the firmware prints</h3>
+  </div>
+
+  <div class="term"><span class="c">── chip present ──────────────────────────────</span>
+<span class="p">uart:~$</span> <span class="o">dacset 0 2000</span>
+dacset ch0 -> dac@0x48 ch0 code=2481 <span class="hl">(30 9B 10)</span> OK
+<span class="p">uart:~$</span> <span class="o">adcregs</span>
+  seq:       33
+  timestamp: 3520 ms
+    ch[0]: <span class="hl">1998 mV</span>
+    ch[3]: <span class="hl">998 mV</span>
+
+<span class="c">── chip absent ───────────────────────────────</span>
+<span class="p">uart:~$</span> <span class="o">dacset 0 2000</span>
+<span class="e">E: addr 0x48 NAK - no device on the virtual bus</span>
+<span class="e">dacset ch0: I2C write to 0x48 FAILED (-19) - device did not ACK</span>
+<span class="p">uart:~$</span> <span class="o">adcregs</span>
+    ch[0]: 0 mV</div>
+
+  <div class="col">
+    <h3>What the board and chip processes log</h3>
+  </div>
+
+  <div class="term"><span class="c">[board]</span> HELLO role=IC  addr=0x48 name=dac7578@48 v1
+<span class="c">[board]</span> HELLO role=MCU addr=0x00 name=zephyr-mcu v1
+<span class="c">[board]</span> NET_SET dac7578@4C ch7 -> <span class="e">not in netlist, dropped</span>   <span class="c">← 16th channel, unused</span>
+<span class="c">[board]</span> I2C addr=0x48 wlen=3 rlen=0 -> dac7578@48
+<span class="c">[board]</span>   W [3]: <span class="hl">30 9B 10</span>
+<span class="c">[dac48]</span> XFER ca=0x30 (cmd=0x3 access=0x0) data=0x9B10 code=2481
+<span class="c">[dac48]</span>   ch0 code=2481 -> <span class="hl">1999340 uV</span> (net push)
+<span class="c">[board]</span> NET_SET dac7578@48 ch0 -> net0 = 1999340 uV
+<span class="c">[board]</span>   reply status=OK rlen=0</div>
+</section>
+
+<section>
+  <div class="col">
+    <h2>How it gets built</h2>
+    <p class="deck">Two toolchains that never meet, and the header that joins them</p>
+    <p>The chip models compile with plain host <code>gcc</code> and know nothing about Zephyr — no <code>ZEPHYR_BASE</code>, no devicetree, no west. That is the point: they are reusable against any MCU or RTOS. The only thing shared across the boundary is a protocol header that includes <code>&lt;stdint.h&gt;</code> and nothing else.</p>
+  </div>
+
+  <figure>
+    <div class="figbody">
+      <svg viewBox="0 0 940 340" role="img" aria-label="Two independent build systems: a plain host CMake build producing the board and DAC binaries, and the Zephyr west build producing zephyr.exe. Both include the same protocol header, which depends only on stdint.h.">
+        <!-- host build -->
+        <rect x="30" y="30" width="384" height="160" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="50" y="56" font-family="var(--mono)" font-size="13" font-weight="700" fill="currentColor">cmake -S vpcb -B build-vpcb</text>
+        <text x="50" y="76" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">host gcc · no Zephyr anywhere</text>
+        <line x1="30" y1="90" x2="414" y2="90" stroke="var(--rule)" stroke-width="1"/>
+        <text x="50" y="116" font-family="var(--mono)" font-size="12.5" fill="var(--ink-2)">board/main.c        → vpcb-board</text>
+        <text x="50" y="140" font-family="var(--mono)" font-size="12.5" fill="var(--ink-2)">ics/dac7578/main.c  → vpcb-dac7578</text>
+        <text x="50" y="164" font-family="var(--mono)" font-size="12.5" fill="var(--ink-3)">tools/fake_mcu.c    → vpcb-fake-mcu</text>
+
+        <!-- zephyr build -->
+        <rect x="526" y="30" width="384" height="160" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="546" y="56" font-family="var(--mono)" font-size="13" font-weight="700" fill="currentColor">west build -b native_sim app</text>
+        <text x="546" y="76" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">Zephyr + native_simulator</text>
+        <line x1="526" y1="90" x2="910" y2="90" stroke="var(--rule)" stroke-width="1"/>
+        <text x="546" y="116" font-family="var(--mono)" font-size="12.5" fill="var(--ink-2)">i2c_vpcb.c         Zephyr ctx</text>
+        <text x="546" y="140" font-family="var(--mono)" font-size="12.5" fill="var(--ink-2)">i2c_vpcb_bottom.c  host ctx</text>
+        <text x="546" y="164" font-family="var(--mono)" font-size="12.5" fill="var(--ink-2)">targets/vpcb/*     → zephyr.exe</text>
+
+        <!-- shared header -->
+        <rect x="278" y="248" width="384" height="62" fill="var(--copper-soft)" stroke="var(--copper)" stroke-width="1.5"/>
+        <text x="470" y="274" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--copper)">vpcb/include/vpcb/proto.h</text>
+        <text x="470" y="294" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--copper)">the contract — &lt;stdint.h&gt; and nothing else</text>
+
+        <path d="M222 190 L222 279 L276 279" fill="none" stroke="var(--copper)" stroke-width="2"/>
+        <path d="M718 190 L718 279 L664 279" fill="none" stroke="var(--copper)" stroke-width="2"/>
+
+        <text x="120" y="228" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">3 host binaries</text>
+        <text x="740" y="228" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">1 firmware binary</text>
+      </svg>
+    </div>
+    <figcaption><b>Figure 4 — two builds, one contract.</b> Neither build knows the other exists; you can compile <code>vpcb/</code> on a machine with no Zephyr installed. If <code>proto.h</code> ever includes a Zephyr or host header, the process separation has quietly leaked.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="col">
+    <h2>Running it</h2>
+    <p class="deck">Four processes, started in order</p>
+  </div>
+
+  <div class="term"><span class="c"># host side — no Zephyr needed</span>
+cmake -S vpcb -B build-vpcb && cmake --build build-vpcb
+
+<span class="c"># firmware</span>
+west build -b native_sim app -d build-vpcb-fw
+
+<span class="c"># bring up the board, then the chips, then the MCU</span>
+./build-vpcb/vpcb-board   --sock /tmp/vpcb.sock --netlist vpcb/netlists/adc_loopback.txt &amp;
+./build-vpcb/vpcb-dac7578 --sock /tmp/vpcb.sock --addr 0x48 &amp;
+./build-vpcb/vpcb-dac7578 --sock /tmp/vpcb.sock --addr 0x4c &amp;
+./build-vpcb-fw/zephyr/zephyr.exe
+
+<span class="c"># omit the two dac7578 lines to get the chip-absent case</span></div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Check</th><th>Result</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Chip present — ch[0]</td><td class="num">1998 mV</td><td><span class="pill ok">PASS</span> target 2000, 1 LSB ≈ 0.806 mV</td></tr>
+        <tr><td>Chip present — ch[3]</td><td class="num">998 mV</td><td><span class="pill ok">PASS</span> target 1000</td></tr>
+        <tr><td>Chip absent — write</td><td class="num">−19</td><td><span class="pill nak">NAK</span> −ENODEV, error path ran</td></tr>
+        <tr><td>Chip absent — ch[0]</td><td class="num">0 mV</td><td><span class="pill ok">PASS</span> no phantom reading</td></tr>
+        <tr><td>Unit tests (twister)</td><td class="num">4 / 4</td><td><span class="pill ok">PASS</span> no regression</td></tr>
+        <tr><td>Integration (QEMU)</td><td class="num">38 / 38</td><td><span class="pill ok">PASS</span> 76.68 s</td></tr>
+        <tr><td>nucleo_h723zg build</td><td class="num">5.64%</td><td><span class="pill ok">PASS</span> flash used, still compiles</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+    <h2>Three things worth remembering</h2>
+
+    <div class="note">
+      <b>The clock is for pacing, not synchronising.</b> Reactive chip models need no shared clock — a register write is ordered by the request/response itself. But with simulated time free-running, the 100 ms sample period elapses instantly and the ADC floods the board with net reads. <code>CONFIG_NATIVE_SIM_SLOWDOWN_TO_REAL_TIME</code> is in there as a rate limiter.
+    </div>
+
+    <div class="note">
+      <b>Include paths don't propagate to the host context.</b> <code>target_sources(native_simulator INTERFACE …)</code> works from an application CMakeLists, but <code>INTERFACE_INCLUDE_DIRECTORIES</code> is not among the properties <code>arch/posix/CMakeLists.txt</code> honours. Include paths for bottom-half files have to be passed as <code>-I</code> through <code>target_compile_options</code>.
+    </div>
+
+    <div class="note">
+      <b>The async analog domain is real, and it bites.</b> The first board implementation assumed the next message from a chip would be its reply. It wasn't — the chip drives its output first. The board now services interleaved <code>NET_SET</code> while awaiting a reply, which is the correct model: a chip changes its pins whenever it likes.
+    </div>
+  </div>
+</section>
+
+<footer>
+  Zephyr v4.4.0-13865-g45bbe613f387 · SDK 1.0.1 · native_sim/native · verified on Linux
+</footer>
+
+</div>
+</body>
+</html>
