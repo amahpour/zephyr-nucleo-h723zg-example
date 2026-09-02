@@ -16,6 +16,24 @@ config APP_TARGET_HW
       Build for real hardware with physical ADC.
       No injection commands are compiled.
 
+config APP_TARGET_VPCB
+    bool "Virtual PCB target (native_sim, out-of-process ICs)"
+    help
+      Build for native_sim against a virtual PCB. The I2C bus leaves the
+      process: IC models run as separate OS processes and are reached over
+      a Unix socket, so an absent chip NAKs exactly as it would on copper.
+
+endmenu
+
+menu "Virtual PCB"
+
+config I2C_VPCB
+    bool "Virtual PCB I2C controller driver"
+    depends on I2C
+    help
+      I2C controller that forwards transactions out of the process to the
+      virtual PCB board process.
+
 endmenu
 
 menu "Application Configuration"
