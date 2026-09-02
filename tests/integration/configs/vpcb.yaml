@@ -1,0 +1,27 @@
+# Virtual PCB test configuration (native_sim + out-of-process DAC models)
+#
+# The DACs are separate OS processes reached over a Unix socket, so this
+# exercises a real driver path rather than injecting into the ADC.
+#
+# Build both halves first:
+#   cmake -S vpcb -B build-vpcb && cmake --build build-vpcb
+#   west build -b native_sim app -d build-vpcb-fw
+#
+# Usage: pytest tests/integration/ --config=tests/integration/configs/vpcb.yaml -v
+
+dut:
+  type: native_sim
+  binary: build-vpcb-fw/zephyr/zephyr.exe
+  vpcb_dir: build-vpcb
+  netlist: vpcb/netlists/adc_loopback.txt
+  # Two DAC7578s: 0x48 serves channels 0-7, 0x4c serves 8-14.
+  dacs:
+    - "0x48"
+    - "0x4c"
+  boot_timeout: 10.0
+
+instrument:
+  type: vpcb
+
+# 15 channels, matching CONFIG_APP_NUM_CH and both shipping board configs.
+num_channels: 15
