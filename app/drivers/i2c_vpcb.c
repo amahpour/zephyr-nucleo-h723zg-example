@@ -16,6 +16,9 @@
 #include <zephyr/init.h>
 #include <string.h>
 
+#include <cmdline.h>           /* native_sim command line options */
+#include <posix_native_task.h>
+
 #include "i2c_vpcb_bottom.h"
 #include "i2c_vpcb.h"
 
@@ -28,8 +31,37 @@ LOG_MODULE_REGISTER(i2c_vpcb, CONFIG_I2C_LOG_LEVEL);
 
 #define VPCB_XFER_TIMEOUT_MS 1000
 
-static char vpcb_sock_path[128] = "/tmp/vpcb.sock";
+#define VPCB_DEFAULT_SOCK "/tmp/vpcb.sock"
+
+static char vpcb_sock_path[128] = VPCB_DEFAULT_SOCK;
 static bool vpcb_ready;
+
+/* Set by --vpcb-sock. Points into argv, so it is only read during init. */
+static char *vpcb_sock_opt;
+
+static void vpcb_add_options(void)
+{
+	static struct args_struct_t vpcb_options[] = {
+		{
+			.is_mandatory = false,
+			.option = "vpcb-sock",
+			.name = "path",
+			.type = 's',
+			.dest = (void *)&vpcb_sock_opt,
+			.descript = "Unix socket of the virtual PCB board process "
+				    "(default: " VPCB_DEFAULT_SOCK "). Give each "
+				    "concurrent run its own path.",
+		},
+		ARG_TABLE_ENDMARKER,
+	};
+
+	native_add_command_line_opts(vpcb_options);
+}
+
+/* PRE_BOOT_1 runs before device init, so the path is settled before the
+ * driver tries to connect.
+ */
+NATIVE_TASK(vpcb_add_options, PRE_BOOT_1, 11);
 
 static int i2c_vpcb_configure(const struct device *dev, uint32_t cfg)
 {
@@ -122,6 +154,10 @@ void vpcb_set_sock(const char *p)
 static int i2c_vpcb_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
+
+	if (vpcb_sock_opt != NULL) {
+		vpcb_set_sock(vpcb_sock_opt);
+	}
 
 	if (vpcb_bottom_connect(vpcb_sock_path, "zephyr-mcu") != 0) {
 		LOG_ERR("could not attach to virtual PCB at %s", vpcb_sock_path);
