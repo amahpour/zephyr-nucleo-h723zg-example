@@ -32,7 +32,6 @@ elseif(CONFIG_APP_TARGET_VPCB)
     message(STATUS "Building for VIRTUAL PCB target (out-of-process ICs)")
     target_sources(app PRIVATE
         targets/vpcb/adc_backend.c
-        targets/vpcb/cmd_dac.c
         drivers/i2c_vpcb.c
     )
     target_include_directories(app PRIVATE
@@ -56,7 +55,10 @@ endif()
 # the virtual PCB. CONFIG_DAC_DACX578 follows the devicetree, so adding a node
 # on any board is enough to pull the driver in.
 if(CONFIG_DAC_DACX578)
-    target_sources(app PRIVATE drivers/dac_dacx578.c)
+    target_sources(app PRIVATE
+        drivers/dac_dacx578.c
+        src/cmd_dac.c
+    )
 endif()
 
 if(NOT CONFIG_APP_TARGET_SIM AND NOT CONFIG_APP_TARGET_HW AND NOT CONFIG_APP_TARGET_VPCB)

@@ -1,15 +1,16 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * Shell command that drives a real DAC7578 register write across the virtual
- * PCB. Unlike the simulator target's `adcset`, nothing is injected into the
- * ADC: the value travels MCU -> DAC driver -> I2C -> board -> IC process ->
- * net -> ADC, the same path it takes on hardware.
+ * Shell command that drives a real DAC7578 register write. Unlike the
+ * simulator target's `adcset`, nothing is injected into the ADC: the value
+ * travels MCU -> DAC driver -> I2C -> DAC -> net -> ADC. Against the virtual
+ * PCB two of those hops cross a process boundary; on hardware they cross
+ * copper. The firmware cannot tell, which is the point.
  *
- * The register encoding lives in the DACx578 driver, not here. This command
- * only maps a board channel onto a part and converts millivolts to a code, so
- * the bytes that reach the bus are produced by the very same driver that would
- * run against real silicon.
+ * This command is deliberately target-agnostic. The register encoding lives in
+ * the DACx578 driver, and all that is left here is the board-level channel map
+ * and the millivolt-to-code conversion, so wiring the parts up for real needs
+ * no new code.
  */
 
 #include <zephyr/kernel.h>
@@ -20,6 +21,10 @@
 
 #define DAC_U1_NODE DT_NODELABEL(dac_u1)
 #define DAC_U2_NODE DT_NODELABEL(dac_u2)
+
+#if !DT_NODE_EXISTS(DAC_U1_NODE) || !DT_NODE_EXISTS(DAC_U2_NODE)
+#error "dacset needs two DACx578 nodes labelled dac_u1 and dac_u2"
+#endif
 
 /* The channel map below assumes the two parts are interchangeable. They are on
  * this board, but say so at compile time rather than trusting the overlay.
