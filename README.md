@@ -6,18 +6,21 @@ Periodically samples ADC channels and exposes values via UART shell commands.
 
 ## Prerequisites
 
-Install Zephyr RTOS. Quick minimal setup:
+Install Zephyr RTOS. The Zephyr revision is pinned in [`ZEPHYR_REVISION`](ZEPHYR_REVISION)
+and the commands below read it from that file, so local setup and CI cannot drift apart.
+Run them from a checkout of this repository.
 
 ```bash
 python3 -m venv ~/zephyrproject/.venv
 source ~/zephyrproject/.venv/bin/activate
 pip install west
 
-west init ~/zephyrproject
+west init -m https://github.com/zephyrproject-rtos/zephyr \
+    --mr "$(cat ZEPHYR_REVISION)" ~/zephyrproject
 cd ~/zephyrproject
 west update zephyr hal_stm32 cmsis cmsis_6
-west zephyr-export
 west packages pip --install
+west zephyr-export
 
 cd zephyr
 west sdk install -t x86_64-zephyr-elf arm-zephyr-eabi
