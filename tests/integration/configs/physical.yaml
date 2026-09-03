@@ -38,11 +38,3 @@ instrument:
 # Number of ADC channels available (15 channels: 0-14)
 # Temporarily set to 6 for testing channels 0-5 only
 num_channels: 6
-
-tests:
-  - test_read_initial_registers
-  - test_inject_and_read_single_channel
-  - test_inject_and_read_multiple_channels
-  - test_sequence_increment
-  - test_voltage_range_low
-  - test_voltage_range_high
