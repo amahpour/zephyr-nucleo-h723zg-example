@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Texas Instruments DACx578 family: 8-channel, I2C, voltage-output DACs.
+
+  One register map covers the family; the members differ only in resolution:
+  DAC5578 (8-bit), DAC6578 (10-bit) and DAC7578 (12-bit). Set the resolution
+  property to select the part.
+
+  The output stage is a resistor-string DAC feeding a gain-of-two buffer, so
+  full-scale output is twice the reference voltage rather than equal to it.
+
+compatible: "ti,dacx578"
+
+include: [dac-controller.yaml, i2c-device.yaml]
+
+properties:
+  "#io-channel-cells":
+    const: 1
+
+  resolution:
+    type: int
+    required: true
+    enum: [8, 10, 12]
+    description: |
+      DAC resolution in bits. 8 selects DAC5578, 10 selects DAC6578 and
+      12 selects DAC7578.
+
+  full-scale-mv:
+    type: int
+    required: true
+    description: |
+      Full-scale output in millivolts, i.e. twice the reference voltage
+      applied to VREFIN, clamped by AVDD. Applications use this to convert
+      between millivolts and DAC codes.
+
+io-channel-cells:
+  - output

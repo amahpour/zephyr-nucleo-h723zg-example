@@ -49,7 +49,17 @@ elseif(CONFIG_APP_TARGET_VPCB)
         "-I${CMAKE_CURRENT_SOURCE_DIR}/drivers"
         "-I${CMAKE_CURRENT_SOURCE_DIR}/../vpcb/include"
     )
-else()
-    message(WARNING "No target selected! Set CONFIG_APP_TARGET_SIM or CONFIG_APP_TARGET_HW")
+endif()
+
+# The DACx578 driver is not tied to any one target: it talks to whichever I2C
+# controller devicetree hands it, so it builds for hardware as readily as for
+# the virtual PCB. CONFIG_DAC_DACX578 follows the devicetree, so adding a node
+# on any board is enough to pull the driver in.
+if(CONFIG_DAC_DACX578)
+    target_sources(app PRIVATE drivers/dac_dacx578.c)
+endif()
+
+if(NOT CONFIG_APP_TARGET_SIM AND NOT CONFIG_APP_TARGET_HW AND NOT CONFIG_APP_TARGET_VPCB)
+    message(WARNING "No target selected! Set CONFIG_APP_TARGET_SIM, CONFIG_APP_TARGET_HW or CONFIG_APP_TARGET_VPCB")
 endif()
 

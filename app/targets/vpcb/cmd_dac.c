@@ -3,38 +3,57 @@
  *
  * Shell command that drives a real DAC7578 register write across the virtual
  * PCB. Unlike the simulator target's `adcset`, nothing is injected into the
- * ADC: the value travels MCU -> I2C -> board -> IC process -> net -> ADC,
- * the same path it takes on hardware.
+ * ADC: the value travels MCU -> DAC driver -> I2C -> board -> IC process ->
+ * net -> ADC, the same path it takes on hardware.
+ *
+ * The register encoding lives in the DACx578 driver, not here. This command
+ * only maps a board channel onto a part and converts millivolts to a code, so
+ * the bytes that reach the bus are produced by the very same driver that would
+ * run against real silicon.
  */
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/dac.h>
 #include <zephyr/shell/shell.h>
 #include <stdlib.h>
 
-#define VPCB_I2C_NODE DT_NODELABEL(vpcb_i2c)
+#define DAC_U1_NODE DT_NODELABEL(dac_u1)
+#define DAC_U2_NODE DT_NODELABEL(dac_u2)
 
-/* DACx578 command codes (C3:C0), see DAC5578.h / datasheet table_0022 */
-#define CMD_WRITE_UPDATE_CH 0x3
-#define DAC_RESOLUTION      12
-#define DAC_FULL_SCALE_MV   3300
+/* The channel map below assumes the two parts are interchangeable. They are on
+ * this board, but say so at compile time rather than trusting the overlay.
+ */
+BUILD_ASSERT(DT_PROP(DAC_U1_NODE, resolution) == DT_PROP(DAC_U2_NODE, resolution),
+	     "both DACs must share a resolution");
+BUILD_ASSERT(DT_PROP(DAC_U1_NODE, full_scale_mv) == DT_PROP(DAC_U2_NODE, full_scale_mv),
+	     "both DACs must share a full-scale range");
+
+#define DAC_RESOLUTION    DT_PROP(DAC_U1_NODE, resolution)
+#define DAC_FULL_SCALE_MV DT_PROP(DAC_U1_NODE, full_scale_mv)
+#define DAC_CH_PER_PART   8
+#define BOARD_NUM_CH      15
 
 /* Two parts cover 15 channels: 0x48 -> ch 0..7, 0x4c -> ch 8..14 */
-static uint16_t addr_for_channel(unsigned int ch, uint8_t *local)
+static const struct device *dac_for_channel(unsigned int ch, uint8_t *local)
 {
-	if (ch < 8) { *local = (uint8_t)ch;     return 0x48; }
-	*local = (uint8_t)(ch - 8);             return 0x4c;
+	if (ch < DAC_CH_PER_PART) {
+		*local = (uint8_t)ch;
+		return DEVICE_DT_GET(DAC_U1_NODE);
+	}
+
+	*local = (uint8_t)(ch - DAC_CH_PER_PART);
+	return DEVICE_DT_GET(DAC_U2_NODE);
 }
 
 static int cmd_dacset(const struct shell *sh, size_t argc, char **argv)
 {
-	const struct device *bus = DEVICE_DT_GET(VPCB_I2C_NODE);
+	const struct device *dev;
+	struct dac_channel_cfg cfg;
 	unsigned int ch;
 	int mv, ret;
 	uint8_t local;
-	uint16_t addr, code, data;
-	uint8_t w[3];
+	uint16_t code;
 
 	if (argc != 3) {
 		shell_error(sh, "usage: dacset <channel> <millivolts>");
@@ -44,8 +63,8 @@ static int cmd_dacset(const struct shell *sh, size_t argc, char **argv)
 	ch = (unsigned int)strtoul(argv[1], NULL, 0);
 	mv = (int)strtol(argv[2], NULL, 0);
 
-	if (ch >= 15) {
-		shell_error(sh, "channel must be 0..14");
+	if (ch >= BOARD_NUM_CH) {
+		shell_error(sh, "channel must be 0..%d", BOARD_NUM_CH - 1);
 		return -EINVAL;
 	}
 	if (mv < 0 || mv > DAC_FULL_SCALE_MV) {
@@ -53,32 +72,39 @@ static int cmd_dacset(const struct shell *sh, size_t argc, char **argv)
 		return -EINVAL;
 	}
 
-	if (!device_is_ready(bus)) {
-		shell_error(sh, "virtual PCB I2C bus not ready");
+	dev = dac_for_channel(ch, &local);
+	if (!device_is_ready(dev)) {
+		shell_error(sh, "%s not ready", dev->name);
 		return -ENODEV;
 	}
 
-	addr = addr_for_channel(ch, &local);
+	/* Costs no bus traffic on this part, so it is done per command rather
+	 * than tracked in state the shell would have to invalidate.
+	 */
+	cfg = (struct dac_channel_cfg){
+		.channel_id = local,
+		.resolution = DAC_RESOLUTION,
+	};
 
-	/* 12-bit code, left-justified across MSDB/LSDB */
+	ret = dac_channel_setup(dev, &cfg);
+	if (ret != 0) {
+		shell_error(sh, "dacset ch%u: channel setup failed (%d)", ch, ret);
+		return ret;
+	}
+
 	code = (uint16_t)(((long)mv * ((1 << DAC_RESOLUTION) - 1)) / DAC_FULL_SCALE_MV);
-	data = (uint16_t)(code << (16 - DAC_RESOLUTION));
 
-	w[0] = (uint8_t)((CMD_WRITE_UPDATE_CH << 4) | (local & 0x0F));
-	w[1] = (uint8_t)(data >> 8);
-	w[2] = (uint8_t)(data & 0xFF);
-
-	ret = i2c_write(bus, w, sizeof(w), addr);
+	ret = dac_write_value(dev, local, code);
 	if (ret != 0) {
 		shell_error(sh,
-			    "dacset ch%u: I2C write to 0x%02x FAILED (%d)%s",
-			    ch, addr, ret,
+			    "dacset ch%u: write to %s FAILED (%d)%s",
+			    ch, dev->name, ret,
 			    ret == -ENODEV ? " - device did not ACK" : "");
 		return ret;
 	}
 
-	shell_print(sh, "dacset ch%u -> dac@0x%02x ch%u code=%u (%02X %02X %02X) OK",
-		    ch, addr, local, code, w[0], w[1], w[2]);
+	shell_print(sh, "dacset ch%u -> %s ch%u code=%u OK",
+		    ch, dev->name, local, code);
 	return 0;
 }
 

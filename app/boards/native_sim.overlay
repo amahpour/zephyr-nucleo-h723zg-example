@@ -19,6 +19,27 @@
         #address-cells = <1>;
         #size-cells = <0>;
         clock-frequency = <100000>;
+
+        /* Two DAC7578s cover the 15 channels the application samples:
+         * 0x48 serves 0-7, 0x4c serves 8-14.
+         */
+        dac_u1: dacx578@48 {
+            compatible = "ti,dacx578";
+            reg = <0x48>;
+            #io-channel-cells = <1>;
+            resolution = <12>;
+            full-scale-mv = <3300>;
+            status = "okay";
+        };
+
+        dac_u2: dacx578@4c {
+            compatible = "ti,dacx578";
+            reg = <0x4c>;
+            #io-channel-cells = <1>;
+            resolution = <12>;
+            full-scale-mv = <3300>;
+            status = "okay";
+        };
     };
 };
 

@@ -34,3 +34,40 @@
 	             &adc3_inp8_pf6>;  /* C12: A8 */
 	pinctrl-names = "default";
 };
+
+/*
+ * Two DAC7578s on the Arduino R3 I2C header. i2c1 is `arduino_i2c` on this
+ * board and the board DTS already enables it at 400 kHz on PB8 (D15, SCL) and
+ * PB9 (D14, SDA), so only the child nodes are added here.
+ *
+ * Addresses are strapped, not programmed: A1/A0 tied low give 0x48, and both
+ * left floating give 0x4c. That keeps the parts at the same two addresses the
+ * virtual PCB models, so one firmware image drives either.
+ *
+ * full-scale-mv is 3300 because the output buffer has a gain of two, so VREFIN
+ * must be 1.65 V. Feeding it 3.3 V would ask for a 6.6 V swing the 3.3 V supply
+ * cannot deliver, and every code above mid-scale would silently clip.
+ */
+&i2c1 {
+	status = "okay";
+
+	/* U1 - board channels 0-7 */
+	dac_u1: dacx578@48 {
+		compatible = "ti,dacx578";
+		reg = <0x48>;
+		#io-channel-cells = <1>;
+		resolution = <12>;
+		full-scale-mv = <3300>;
+		status = "okay";
+	};
+
+	/* U2 - board channels 8-14; its channel 7 is unused */
+	dac_u2: dacx578@4c {
+		compatible = "ti,dacx578";
+		reg = <0x4c>;
+		#io-channel-cells = <1>;
+		resolution = <12>;
+		full-scale-mv = <3300>;
+		status = "okay";
+	};
+};
