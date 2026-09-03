@@ -5,7 +5,7 @@ Generic ADC integration tests.
 These tests work with any DUT/instrument combination defined in the config file.
 Tests use abstract interfaces so they can run against:
 - Virtual: QEMU + VirtualInstrument (adcset injection)
-- Physical: Real hardware + Rigol DP832 power supply + KB2040 mux
+- Physical: Real hardware, driven by DACs on the board's own I2C bus
 """
 
 import re
@@ -63,6 +63,50 @@ def parse_sequence_number(response: str) -> int:
         raise ValueError(f"Could not find seq in response: {response}")
     return int(match.group(1))
 
+def wait_for_fresh_sample(dut, min_advance: int = 2, timeout: float = 5.0,
+                          poll_interval: float = 0.02) -> int:
+    """
+    Block until the firmware has completed a fresh sample cycle.
+
+    Polls `adcregs` and returns once `seq` has advanced by `min_advance`. This
+    replaces fixed sleeps: the firmware already publishes when it has resampled,
+    so there is no reason to guess a duration.
+
+    `min_advance` defaults to 2 rather than 1 because a single advance can be a
+    cycle that was already in flight when the voltage was set, which does not
+    prove the new value was sampled. Two guarantees a complete cycle after it.
+
+    One code path serves every instrument. Settling is not modelled separately
+    because nothing in the current rigs needs it: injection is instantaneous for
+    the emulated ADC, and on hardware a DAC settles in microseconds against a
+    100 ms sample period. Add a settle time when an instrument justifies one.
+
+    Args:
+        dut: Device under test
+        min_advance: How far seq must advance before returning
+        timeout: Seconds to wait before giving up
+        poll_interval: Delay between polls, to avoid busy-waiting on the shell
+
+    Returns:
+        The sequence number observed after the advance
+
+    Raises:
+        TimeoutError: If seq does not advance far enough in time
+    """
+    start_seq = parse_sequence_number(dut.send_command("adcregs"))
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        seq = parse_sequence_number(dut.send_command("adcregs"))
+        if seq - start_seq >= min_advance:
+            return seq
+        time.sleep(poll_interval)
+
+    raise TimeoutError(
+        f"seq did not advance by {min_advance} within {timeout}s "
+        f"(stuck at {start_seq}). The firmware has stopped sampling."
+    )
+
 
 class TestADC:
     """Generic ADC tests - work with any instrument/DUT combination."""
@@ -87,14 +131,10 @@ class TestADC:
         response1 = dut.send_command("adcregs")
         seq1 = parse_sequence_number(response1)
 
-        # Wait for next sample (sampling period is ~100ms)
-        time.sleep(0.15)
+        # Wait for the firmware to report fresh samples. The real assertion is
+        # the helper's timeout: if sampling has stopped, this raises.
+        seq2 = wait_for_fresh_sample(dut)
 
-        # Read again
-        response2 = dut.send_command("adcregs")
-        seq2 = parse_sequence_number(response2)
-
-        # Sequence should have incremented
         assert seq2 > seq1, f"seq should increment: {seq1} -> {seq2}"
 
 
@@ -109,8 +149,8 @@ class TestADCSingleChannel:
         instrument.enable_output(channel, True)
         instrument.set_voltage(channel, test_voltage)
 
-        # Wait for ADC sampling and signal to settle
-        time.sleep(1.0)
+        # Wait for the ADC to actually resample rather than guessing a duration
+        wait_for_fresh_sample(dut)
 
         # Read back and verify
         response = dut.send_command("adcregs")
@@ -138,7 +178,7 @@ class TestADCVoltageRange:
 
         instrument.enable_output(channel, True)
         instrument.set_voltage(channel, test_voltage)
-        time.sleep(1.0)
+        wait_for_fresh_sample(dut)
 
         response = dut.send_command("adcregs")
         actual_voltage = parse_channel_value(response, channel)
@@ -166,12 +206,12 @@ class TestADCIsolation:
         if isinstance(instrument, VirtualInstrument):
             for ch in range(num_test_channels):
                 instrument.set_voltage(ch, VIRTUAL_DEFAULT_MV)
-            time.sleep(0.5)  # Wait for reset to take effect
+            wait_for_fresh_sample(dut)  # Let the reset reach the registers
 
         # Drive only the specified channel
         instrument.enable_output(driven_channel, True)
         instrument.set_voltage(driven_channel, test_voltage)
-        time.sleep(1.0)
+        wait_for_fresh_sample(dut)
 
         response = dut.send_command("adcregs")
 
