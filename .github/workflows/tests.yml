@@ -36,7 +36,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/zephyrproject
-          key: zephyr-workspace-${{ runner.os }}-v1
+          key: zephyr-workspace-${{ runner.os }}-${{ hashFiles('ZEPHYR_REVISION') }}
       
       - name: Setup Zephyr workspace
         if: steps.cache-zephyr.outputs.cache-hit != 'true'
@@ -45,7 +45,10 @@ jobs:
           source ~/zephyrproject/.venv/bin/activate
           pip install west
           
-          west init ~/zephyrproject
+          # The pinned revision lives in ZEPHYR_REVISION, which also feeds the
+          # cache key above and the README setup commands. One source of truth.
+          west init -m https://github.com/zephyrproject-rtos/zephyr \
+              --mr "$(cat ${{ github.workspace }}/ZEPHYR_REVISION)" ~/zephyrproject
           cd ~/zephyrproject
           west update zephyr hal_stm32 cmsis cmsis_6
           # `west packages pip --install` must precede `west zephyr-export`:
