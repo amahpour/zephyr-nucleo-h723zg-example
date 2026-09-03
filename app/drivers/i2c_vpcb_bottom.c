@@ -9,6 +9,10 @@
  * Note the timeouts here are WALL CLOCK. While the MCU blocks on this socket,
  * native_sim's simulated time is frozen, so a Zephyr-side timeout could never
  * fire. The watchdog has to live at this level or a dead IC hangs the sim.
+ *
+ * Because it is wall clock, expiry says nothing about the modelled bus. It is
+ * reported as VPCB_BOTTOM_NO_REPLY so the Zephyr half can tell a wedged harness
+ * apart from a bus event rather than blaming the firmware for our crash.
  */
 
 #include <stdio.h>
@@ -66,7 +70,7 @@ int vpcb_bottom_i2c(uint16_t addr, const uint8_t *w, uint16_t wlen,
 	}
 
 	int rc = vpcb_recv(sock_fd, &h, rp, sizeof(rp), timeout_ms);
-	if (rc == 2) { return VPCB_ETIMEOUT; }
+	if (rc == 2) { return VPCB_BOTTOM_NO_REPLY; }
 	if (rc != 0 || h.type != VPCB_MSG_I2C_REPLY) { return -1; }
 
 	struct vpcb_i2c_reply *rep = (struct vpcb_i2c_reply *)rp;
@@ -87,7 +91,7 @@ int vpcb_bottom_net_get(uint32_t net, int32_t *microvolts, int timeout_ms)
 	if (vpcb_send(sock_fd, VPCB_MSG_NET_GET, ++tx_seq, &g, sizeof(g)) != 0) { return -1; }
 
 	int rc = vpcb_recv(sock_fd, &h, rp, sizeof(rp), timeout_ms);
-	if (rc == 2) { return VPCB_ETIMEOUT; }
+	if (rc == 2) { return VPCB_BOTTOM_NO_REPLY; }
 	if (rc != 0 || h.type != VPCB_MSG_NET_VALUE) { return -1; }
 
 	struct vpcb_net_value *v = (struct vpcb_net_value *)rp;
