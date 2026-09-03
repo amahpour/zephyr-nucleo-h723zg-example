@@ -54,5 +54,20 @@ config APP_SAMPLE_PERIOD_MS
 
 endmenu
 
+menu "Device Drivers"
+
+config DAC_DACX578
+    bool "TI DACx578 8-channel I2C DAC"
+    default y
+    depends on DT_HAS_TI_DACX578_ENABLED
+    depends on DAC && I2C
+    help
+      Driver for the TI DAC5578/6578/7578 family. Nothing in it is specific
+      to the virtual PCB: it drives whichever I2C controller devicetree hands
+      it, so the same object code runs against an out-of-process IC model and
+      against real silicon.
+
+endmenu
+
 source "Kconfig.zephyr"
 

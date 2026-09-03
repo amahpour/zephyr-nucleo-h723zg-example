@@ -310,7 +310,7 @@ footer {
   <div class="col">
     <h2>The loop</h2>
     <p class="deck">What happens between <code>dacset 0 2000</code> and <code>adcregs</code></p>
-    <p>The firmware never sees the DAC. It writes three bytes to an I²C address, and everything past that address lives in a different program with a different address space. The value only returns because a separate board process holds the netlist that says which DAC channel is soldered to which ADC pin.</p>
+    <p>The firmware never sees the DAC. It calls the Zephyr DAC API; the <code>dacx578</code> driver turns that into three bytes on an I²C address, and everything past that address lives in a different program with a different address space. The value only returns because a separate board process holds the netlist that says which DAC channel is soldered to which ADC pin.</p>
   </div>
 
   <figure>
@@ -335,7 +335,8 @@ footer {
         <line x1="24" y1="92" x2="316" y2="92" stroke="var(--rule)" stroke-width="1"/>
 
         <text x="42" y="122" font-family="var(--mono)" font-size="13" fill="currentColor">shell: dacset 0 2000</text>
-        <text x="42" y="142" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">i2c_write() → i2c_vpcb</text>
+        <text x="42" y="142" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">dac_write_value() → dacx578</text>
+        <text x="42" y="162" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">i2c_write() → i2c_vpcb</text>
 
         <text x="42" y="322" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">adc_emul value_func</text>
         <text x="42" y="342" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">regs.mv[0]</text>
@@ -431,7 +432,7 @@ footer {
         <!-- app row -->
         <rect x="60" y="24" width="330" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="225" y="48" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="currentColor">targets/vpcb/cmd_dac.c</text>
-        <text x="225" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">dacset — writes the DAC</text>
+        <text x="225" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">dacset — channel map, mV → code</text>
 
         <rect x="510" y="24" width="330" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="675" y="48" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="currentColor">targets/vpcb/adc_backend.c</text>
@@ -439,7 +440,7 @@ footer {
 
         <!-- API row -->
         <rect x="60" y="118" width="330" height="48" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1"/>
-        <text x="225" y="147" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">Zephyr I²C API</text>
+        <text x="225" y="147" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">DAC API → dacx578 → I²C API</text>
 
         <rect x="510" y="118" width="330" height="48" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1"/>
         <text x="675" y="147" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="var(--ink-2)">adc_emul + value_func</text>
@@ -557,7 +558,7 @@ footer {
 
   <div class="term"><span class="c">── chip present ──────────────────────────────</span>
 <span class="p">uart:~$</span> <span class="o">dacset 0 2000</span>
-dacset ch0 -> dac@0x48 ch0 code=2481 <span class="hl">(30 9B 10)</span> OK
+dacset ch0 -> dacx578@48 ch0 code=2481 OK
 <span class="p">uart:~$</span> <span class="o">adcregs</span>
   seq:       33
   timestamp: 3520 ms
@@ -567,7 +568,7 @@ dacset ch0 -> dac@0x48 ch0 code=2481 <span class="hl">(30 9B 10)</span> OK
 <span class="c">── chip absent ───────────────────────────────</span>
 <span class="p">uart:~$</span> <span class="o">dacset 0 2000</span>
 <span class="e">E: addr 0x48 NAK - no device on the virtual bus</span>
-<span class="e">dacset ch0: I2C write to 0x48 FAILED (-19) - device did not ACK</span>
+<span class="e">dacset ch0: write to dacx578@48 FAILED (-19) - device did not ACK</span>
 <span class="p">uart:~$</span> <span class="o">adcregs</span>
     ch[0]: 0 mV</div>
 
