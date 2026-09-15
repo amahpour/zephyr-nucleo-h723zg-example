@@ -106,6 +106,17 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 
 	int st = vpcb_bottom_i2c(addr, wbuf, wlen, rptr, rlen, VPCB_XFER_TIMEOUT_MS);
 
+	if (st == VPCB_BOTTOM_NO_REPLY) {
+		/* Not a bus event. Nobody answered within the host-side deadline,
+		 * which means the board or an IC process is wedged or gone. Say so
+		 * plainly: -ETIMEDOUT here would let a broken harness masquerade as
+		 * a chip that stretched the clock.
+		 */
+		LOG_ERR("no reply from the virtual PCB within %d ms of host time "
+			"(addr 0x%02x) - board or IC process not responding",
+			VPCB_XFER_TIMEOUT_MS, addr);
+		return -EIO;
+	}
 	if (st < 0) {
 		LOG_ERR("transport failure to virtual PCB");
 		return -EIO;
@@ -121,7 +132,10 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 		LOG_ERR("addr 0x%02x NAK - no device on the virtual bus", addr);
 		return -ENODEV;
 	case VPCB_ST_TIMEOUT:
-		LOG_ERR("addr 0x%02x timed out", addr);
+		/* Reported by the board as a modelled bus event, not inferred from
+		 * our own silence. Unreachable from a host stall now.
+		 */
+		LOG_ERR("addr 0x%02x timed out on the bus", addr);
 		return -ETIMEDOUT;
 	default:
 		LOG_ERR("addr 0x%02x bus error (status %d)", addr, st);
@@ -137,6 +151,15 @@ int vpcb_net_read_mv(uint32_t net, int32_t *millivolts)
 	if (!vpcb_ready) { return -EIO; }
 
 	st = vpcb_bottom_net_get(net, &uv, VPCB_XFER_TIMEOUT_MS);
+	if (st == VPCB_BOTTOM_NO_REPLY) {
+		/* Without this the sampling thread reports a wedged board as
+		 * -ENODEV, i.e. "net not in the netlist", which is a wiring fault.
+		 */
+		LOG_ERR("no reply from the virtual PCB within %d ms of host time "
+			"(net %u) - board process not responding",
+			VPCB_XFER_TIMEOUT_MS, net);
+		return -EIO;
+	}
 	if (st < 0)  { return -EIO; }
 	if (st != VPCB_ST_OK) { return -ENODEV; }
 
