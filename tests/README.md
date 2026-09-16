@@ -46,7 +46,8 @@ west twister -p qemu_x86 -s unit.regs
 ## Integration Tests
 
 Python-based integration tests using pytest with a config-driven architecture.
-The same tests work with both virtual (QEMU) and physical (real hardware) setups.
+The same tests run unmodified against three setups: QEMU, the virtual PCB, and
+real hardware.
 
 ### Quick Start (Virtual/QEMU)
 
@@ -70,17 +71,18 @@ PYTHONPATH=tests/integration pytest tests/integration/ \
 ```
 tests/integration/
 ├── configs/
-│   ├── virtual.yaml        # QEMU + virtual instrument config
-│   └── physical.yaml       # Real hardware + Rigol DP832 config
+│   ├── virtual.yaml        # QEMU + adcset injection
+│   ├── vpcb.yaml           # native_sim + DAC models as separate processes
+│   └── physical.yaml       # Real Nucleo + DAC loopback rig
 ├── devices/
 │   ├── base.py             # DUTBase abstract interface
 │   ├── qemu.py             # QEMU device (PTY auto-detection)
+│   ├── native_sim.py       # native_sim + virtual PCB stack launcher
 │   └── physical.py         # Physical UART device
 ├── instruments/
 │   ├── base.py             # InstrumentBase abstract interface
-│   ├── virtual.py          # Virtual instrument (adcset injection)
-│   ├── rigol_adapter.py    # Rigol DP832 adapter
-│   └── rigol_dp832/        # Rigol DP832 driver library
+│   ├── virtual.py          # adcset injection into QEMU's emulated ADC
+│   └── dac.py              # dacset through the DUT's own DACs (vPCB and hardware)
 ├── conftest.py             # Config-driven pytest fixtures
 ├── pytest.ini              # Pytest settings
 └── test_adc.py             # Generic ADC tests
@@ -89,24 +91,20 @@ tests/integration/
 ### Features
 
 - **Config-driven**: YAML files specify DUT and instrument types
-- **Generic tests**: Same tests work with virtual or physical setups
+- **Generic tests**: Same tests run against QEMU, the virtual PCB, or hardware
 - **Layered abstraction**: `DUTBase` and `InstrumentBase` ABCs
 - **Automatic QEMU management**: Fixtures handle QEMU startup/teardown
 - **PTY auto-detection**: Automatically finds the PTY path from QEMU output
 
 ### Running Physical Tests
 
-For testing with real hardware and a Rigol DP832 power supply:
+The physical rig is a DAC loopback: the Nucleo drives two DAC7578s on its own
+I²C bus, wired back into its ADC. Wiring is in [docs/hardware.md](../docs/hardware.md).
+No instrument libraries are needed — `physical.yaml` uses the same `dac`
+instrument as the virtual PCB.
 
 ```bash
-# Edit configs/physical.yaml with your settings:
-#   - Serial port (e.g., /dev/ttyACM0)
-#   - Rigol DP832 VISA resource string
-
-# Install additional dependency
-pip install pyvisa pyvisa-py
-
-# Run physical tests
+# Set the serial port in configs/physical.yaml (e.g. /dev/ttyACM0), then:
 PYTHONPATH=tests/integration pytest tests/integration/ \
     --config=tests/integration/configs/physical.yaml -v
 ```

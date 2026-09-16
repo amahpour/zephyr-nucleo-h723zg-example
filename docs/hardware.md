@@ -77,83 +77,113 @@ west flash --runner openocd
 | `no runners.yaml found` | Rebuild with `--pristine` for the hardware target |
 | `STM32_Programmer_CLI not found` | Use `--runner openocd` instead |
 
-## ADC Configuration
+## Test Rig: DAC Loopback
 
-The firmware supports up to 15 ADC channels when used with the CD74HC4067 mux.
+The board tests itself. Two DAC7578s on the Nucleo's own I²C bus drive voltages
+that are wired straight back into its ADC inputs. The firmware drives them with
+the same `ti,dacx578` driver it runs against the virtual PCB, so the physical
+suite exercises the same code path as `configs/vpcb.yaml` — only the copper is
+real.
 
-Configure in `targets/hw/adc_backend.c`:
-
-1. Set `ADC_CONFIGURED=1`
-2. Define the correct ADC node label (e.g., `adc1`)
-3. Configure channel mappings per the wiring table below
-
-Build with 15 channels:
-```bash
-west build -b nucleo_h723zg app --pristine -- -DCONFIG_APP_NUM_CH=15
-```
-
-## 15-Channel Mux Wiring Guide
+The wiring mirrors `vpcb/netlists/adc_loopback.txt` exactly, and the devicetree
+nodes are in `app/boards/nucleo_h723zg.overlay`.
 
 ### Equipment
-- **Power Supply:** Rigol DP832 (Channel 3, 0-5V output)
-- **Mux:** CD74HC4067 16-channel analog multiplexer on KB2040
+
 - **DUT:** NUCLEO-H723ZG
+- **DACs:** 2 × DAC7578 (8-channel, 12-bit, I²C) — U1 and U2
+- **USB:** one cable to the Nucleo. No bench supply, no mux controller, no network instrument.
 
-### Wiring Diagram
+### I²C Bus
 
-```
-Rigol DP832 CH3 ──────► CD74HC4067 Common (SIG)
-                              │
-                    ┌─────────┴─────────┐
-                    │   16:1 MUX        │
-                    │   Outputs C0-C14  │
-                    └─────────┬─────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-              ▼               ▼               ▼
-           CN9 (A0-A5)    CN7 (D8,D12,    CN10 (A6-A8,
-                              D13,D24)        D32,D33)
-```
+I²C1 is the Arduino I²C (`arduino_i2c`) on this board. The board devicetree
+already enables it at 400 kHz, so nothing extra is needed in firmware.
 
-### Complete Wiring Table
+| Signal | Nucleo pin | Arduino | Connector |
+|--------|------------|---------|-----------|
+| SCL | PB8 | D15 | CN7-2 |
+| SDA | PB9 | D14 | CN7-4 |
+| GND | — | GND | CN7-8 |
+| VDD | — | 3V3 | Arduino power header (CN8) |
 
-| Mux Output | Nucleo Pin | ADC Input | Connector Pin | Wire Color (suggested) |
-|------------|------------|-----------|---------------|------------------------|
-| C0 | PA3 | ADC1_INP15 | CN9-1 (A0) | Brown |
-| C1 | PC0 | ADC1_INP10 | CN9-3 (A1) | Red |
-| C2 | PC3 | **ADC3_INP1** | CN9-5 (A2) | Orange |
-| C3 | PB1 | ADC1_INP5 | CN9-7 (A3) | Yellow |
-| C4 | PC2 | **ADC3_INP0** | CN9-9 (A4) | Green |
-| C5 | PF10 | ADC3_INP6 | CN9-11 (A5) | Blue |
-| C6 | PA5 | ADC1_INP19 | CN7-10 (D13) | Purple |
-| C7 | PA6 | ADC1_INP3 | CN7-12 (D12) | Gray |
-| C8 | PA4 | ADC1_INP18 | CN7-17 (D24) | White |
-| C9 | PF3 | ADC3_INP5 | CN7-20 (D8) | Black |
-| C10 | PF4 | ADC3_INP9 | CN10-7 (A6) | Brown/White |
-| C11 | PF5 | ADC3_INP4 | CN10-9 (A7) | Red/White |
-| C12 | PF6 | ADC3_INP8 | CN10-11 (A8) | Orange/White |
-| C13 | PA0 | ADC1_INP16 | CN10-27 (D32) | Yellow/White |
-| C14 | PB0 | ADC1_INP9 | CN10-29 (D33) | Green/White |
+**Pull-ups:** fit exactly one set on the bus. Two breakouts wired in parallel put
+two sets of pull-ups in parallel; remove one.
 
-**Note:** Mux outputs C0-C15 match software channels 0-15. We use C0-C14 (15 channels).
+### Addresses
+
+The DAC7578 address is set by strapping A1/A0, each tied low, left floating, or
+tied high.
+
+| Part | Address | A1 | A0 | Serves board channels |
+|------|---------|----|----|-----------------------|
+| U1 | `0x48` | GND | GND | 0–7 |
+| U2 | `0x4c` | float | float | 8–14 (channel 7 unused) |
+
+These match the two addresses the virtual PCB models, so one firmware image
+drives either. Confirm the strap table against your breakout before soldering.
+
+### Reference Voltage
+
+The DAC7578 output buffer has a **gain of two**, so full-scale output is twice
+VREFIN. `full-scale-mv` in the overlay is `3300`, which means **VREFIN must be
+1.65 V**.
+
+Feeding VREFIN 3.3 V asks for a 6.6 V swing that a 3.3 V supply cannot deliver:
+every code above mid-scale clips, silently. Check how your breakout wires
+VREFIN. If it ties it to VDD, either supply 1.65 V to VREFIN or change
+`full-scale-mv` in `app/boards/nucleo_h723zg.overlay` to match what the part
+can actually produce.
+
+### DAC-to-ADC Wiring
+
+Each DAC output goes to the same Nucleo pin the retired rig's mux output of the
+same number used, so an existing harness can be rewired output-for-output.
+
+| Board ch | DAC output | Nucleo pin | ADC input | Connector |
+|----------|------------|------------|-----------|-----------|
+| 0 | U1 ch0 | PA3 | ADC1_INP15 | CN9-1 (A0) |
+| 1 | U1 ch1 | PC0 | ADC1_INP10 | CN9-3 (A1) |
+| 2 | U1 ch2 | PC3 | **ADC3_INP1** | CN9-5 (A2) |
+| 3 | U1 ch3 | PB1 | ADC1_INP5 | CN9-7 (A3) |
+| 4 | U1 ch4 | PC2 | **ADC3_INP0** | CN9-9 (A4) |
+| 5 | U1 ch5 | PF10 | ADC3_INP6 | CN9-11 (A5) |
+| 6 | U1 ch6 | PA5 | ADC1_INP19 | CN7-10 (D13) |
+| 7 | U1 ch7 | PA6 | ADC1_INP3 | CN7-12 (D12) |
+| 8 | U2 ch0 | PA4 | ADC1_INP18 | CN7-17 (D24) |
+| 9 | U2 ch1 | PF3 | ADC3_INP5 | CN7-20 (D8) |
+| 10 | U2 ch2 | PF4 | ADC3_INP9 | CN10-7 (A6) |
+| 11 | U2 ch3 | PF5 | ADC3_INP4 | CN10-9 (A7) |
+| 12 | U2 ch4 | PF6 | ADC3_INP8 | CN10-11 (A8) |
+| 13 | U2 ch5 | PA0 | ADC1_INP16 | CN10-27 (D32) |
+| 14 | U2 ch6 | PB0 | ADC1_INP9 | CN10-29 (D33) |
+| — | U2 ch7 | — | — | unused |
 
 **Important:** PC2 and PC3 are `PC2_C` and `PC3_C` pins that only connect to ADC3, not ADC1!
 
-### Ground Connections
+### Driving It By Hand
 
-Connect GND between all devices:
-- Rigol DP832 GND
-- KB2040 Mux GND
-- NUCLEO-H723ZG GND (CN7-8, CN10-17, or any GND pin)
+`dacset` is built for hardware as well as for the virtual PCB:
 
-### ADC Channel Summary by Connector
+```
+uart:~$ dacset 0 2000
+dacset ch0 -> dacx578@48 ch0 code=2481 OK
+uart:~$ adcregs
+```
 
-| Connector | Pins Used | ADC Channels |
-|-----------|-----------|--------------|
-| CN9 | 6 pins | A0-A5 (INP15, INP10, INP13, INP5, INP12, ADC3_INP6) |
-| CN7 | 4 pins | D8, D12, D13, D24 (ADC3_INP5, INP3, INP19, INP18) |
-| CN10 | 5 pins | A6-A8, D32, D33 (ADC3_INP9/4/8, INP16, INP9) |
+A `-19` failure means nothing acknowledged the address: the part is absent,
+unpowered or mis-strapped.
+
+### What the Loopback Can't Tell You
+
+The board drives its own test signal and then measures it. A fault that corrupts
+the DAC write and the ADC read identically would pass. Keep a scope on a couple
+of outputs as an independent witness, and use the virtual PCB — where the IC
+model is a separate process — for fault injection.
+
+## ADC Channel Mapping
+
+15 channels are configured by default in `app/boards/nucleo_h723zg.conf`, with
+the ADC pin assignments in `app/boards/nucleo_h723zg.overlay`.
 
 ### ADC Peripheral Mapping
 
@@ -216,10 +246,9 @@ When multiple USB devices are connected, you can identify which serial port corr
 lsusb
 ```
 
-Expected output for NUCLEO-H723ZG setup:
+Expected output for the loopback rig — the Nucleo is the only USB device:
 ```
 Bus 001 Device 002: ID 0483:374e STMicroelectronics STLINK-V3
-Bus 001 Device 003: ID 239a:8105 Adafruit KB2040
 ```
 
 ### Map Serial Ports to USB Devices
@@ -247,9 +276,144 @@ ioreg -p IOUSB -l -w 0 | grep -E "@|idVendor|idProduct|IODialinDevice"
 | ST-LINK V2-1 | 0483 | 374b | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
 | ST-LINK V3 | 0483 | 374e | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
 | ST-LINK V3 (alt) | 0483 | 374f | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
-| Adafruit KB2040 | 239a | 8105 | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+| Adafruit KB2040 (retired rig) | 239a | 8105 | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
 
-### Finding Rigol DP832 IP Address
+### Updating Test Configuration
+
+Once you've identified the Nucleo's port, update `tests/integration/configs/physical.yaml`:
+
+```yaml
+dut:
+  type: physical
+  port: /dev/ttyACM0  # Nucleo ST-LINK (VID:0483 PID:374e)
+  baudrate: 115200
+
+instrument:
+  type: dac
+
+num_channels: 15
+```
+
+## Differences from Simulator
+
+- `adcset` does **not exist** on hardware builds — there is no injection backdoor
+- `dacset` **does** exist on hardware builds, and drives the real DACs
+- ADC values come from real analog inputs
+- Sampling happens at the same configurable rate
+
+## Running Integration Tests
+
+### Prerequisites
+
+```bash
+pip install -r tests/integration/requirements.txt
+```
+
+No instrument libraries are needed: every rig drives its stimulus through the
+DUT's own shell.
+
+### Physical Hardware Tests
+
+Flash the board, wire the loopback rig, then:
+
+```bash
+PYTHONPATH=tests/integration pytest tests/integration/ \
+  --config=tests/integration/configs/physical.yaml -v
+```
+
+### Virtual PCB Tests
+
+Same instrument, no hardware:
+
+```bash
+cmake -S vpcb -B build-vpcb && cmake --build build-vpcb
+west build -b native_sim app -d build-vpcb-fw --pristine
+PYTHONPATH=tests/integration pytest tests/integration/ \
+  --config=tests/integration/configs/vpcb.yaml -v
+```
+
+### QEMU Tests
+
+```bash
+west build -b qemu_x86 app -d build-qemu --pristine
+PYTHONPATH=tests/integration pytest tests/integration/ \
+  --config=tests/integration/configs/virtual.yaml -v
+```
+
+## Retired Rig: Bench Supply + Mux
+
+**Retired 2026-09. Not used by any config.** Kept for reference, because it is
+why `PHYSICAL_TOLERANCE` in `tests/integration/test_adc.py` is 150 mV, and why
+`test_channel_isolation` only drives one channel at a time.
+
+The original rig fanned a single bench-supply output through a 16:1 analog
+multiplexer. That meant **only one channel could ever be driven at a time**, and
+the mux's on-resistance added roughly 100 mV of error.
+
+### 15-Channel Mux Wiring
+
+#### Equipment
+- **Power Supply:** Rigol DP832 (Channel 3, 0-5V output)
+- **Mux:** CD74HC4067 16-channel analog multiplexer on KB2040
+- **DUT:** NUCLEO-H723ZG
+
+#### Wiring Diagram
+
+```
+Rigol DP832 CH3 ──────► CD74HC4067 Common (SIG)
+                              │
+                    ┌─────────┴─────────┐
+                    │   16:1 MUX        │
+                    │   Outputs C0-C14  │
+                    └─────────┬─────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+              ▼               ▼               ▼
+           CN9 (A0-A5)    CN7 (D8,D12,    CN10 (A6-A8,
+                              D13,D24)        D32,D33)
+```
+
+#### Complete Wiring Table
+
+| Mux Output | Nucleo Pin | ADC Input | Connector Pin | Wire Color (suggested) |
+|------------|------------|-----------|---------------|------------------------|
+| C0 | PA3 | ADC1_INP15 | CN9-1 (A0) | Brown |
+| C1 | PC0 | ADC1_INP10 | CN9-3 (A1) | Red |
+| C2 | PC3 | **ADC3_INP1** | CN9-5 (A2) | Orange |
+| C3 | PB1 | ADC1_INP5 | CN9-7 (A3) | Yellow |
+| C4 | PC2 | **ADC3_INP0** | CN9-9 (A4) | Green |
+| C5 | PF10 | ADC3_INP6 | CN9-11 (A5) | Blue |
+| C6 | PA5 | ADC1_INP19 | CN7-10 (D13) | Purple |
+| C7 | PA6 | ADC1_INP3 | CN7-12 (D12) | Gray |
+| C8 | PA4 | ADC1_INP18 | CN7-17 (D24) | White |
+| C9 | PF3 | ADC3_INP5 | CN7-20 (D8) | Black |
+| C10 | PF4 | ADC3_INP9 | CN10-7 (A6) | Brown/White |
+| C11 | PF5 | ADC3_INP4 | CN10-9 (A7) | Red/White |
+| C12 | PF6 | ADC3_INP8 | CN10-11 (A8) | Orange/White |
+| C13 | PA0 | ADC1_INP16 | CN10-27 (D32) | Yellow/White |
+| C14 | PB0 | ADC1_INP9 | CN10-29 (D33) | Green/White |
+
+**Note:** Mux outputs C0-C15 match software channels 0-15. We use C0-C14 (15 channels).
+
+**Important:** PC2 and PC3 are `PC2_C` and `PC3_C` pins that only connect to ADC3, not ADC1!
+
+#### Ground Connections
+
+Connect GND between all devices:
+- Rigol DP832 GND
+- KB2040 Mux GND
+- NUCLEO-H723ZG GND (CN7-8, CN10-17, or any GND pin)
+
+#### ADC Channel Summary by Connector
+
+| Connector | Pins Used | ADC Channels |
+|-----------|-----------|--------------|
+| CN9 | 6 pins | A0-A5 (INP15, INP10, INP13, INP5, INP12, ADC3_INP6) |
+| CN7 | 4 pins | D8, D12, D13, D24 (ADC3_INP5, INP3, INP19, INP18) |
+| CN10 | 5 pins | A6-A8, D32, D33 (ADC3_INP9/4/8, INP16, INP9) |
+
+### Finding the Rigol DP832 IP Address
 
 To find the IP address of the Rigol DP832 power supply:
 
@@ -262,48 +426,9 @@ To find the IP address of the Rigol DP832 power supply:
 - Check your router's DHCP client list for a device named "RIGOL" or "DP832"
 - Scan your network: `nmap -sn 192.168.68.0/24 | grep -B 2 "Rigol\|DP832"`
 
-Once you have the IP address, update it in `tests/integration/configs/physical.yaml`:
-```yaml
-power_supply:
-  visa_resource: "TCPIP::<YOUR_IP_HERE>::INSTR"
-```
+### Known Limitations of the Mux Rig
 
-**Alternative: Network scan (if device name is visible):**
-```bash
-# Scan network and look for Rigol hostname
-nmap -sn 192.168.68.0/24 | grep -B 2 "Rigol\|DP832"
-```
-
-### Updating Test Configuration
-
-Once you've identified the correct ports and IP addresses, update `tests/integration/configs/physical.yaml`:
-
-```yaml
-dut:
-  type: physical
-  port: /dev/ttyACM0  # Nucleo ST-LINK (VID:0483 PID:374e)
-  baudrate: 115200
-
-instrument:
-  type: physical
-  power_supply:
-    visa_resource: "TCPIP::192.168.68.109::INSTR"  # Rigol DP832 IP
-    channel: 3
-    current_limit: 0.1
-  mux:
-    port: /dev/ttyACM1  # KB2040 (VID:239a PID:8105)
-    baudrate: 115200
-```
-
-## Differences from Simulator
-
-- `adcset` command does **not exist** on hardware builds
-- ADC values come from real analog inputs
-- Sampling happens at the same configurable rate
-
-## Known Limitations
-
-### CD74HC4067 Mux On-Resistance
+#### CD74HC4067 Mux On-Resistance
 
 The CD74HC4067 analog multiplexer has significant on-resistance (Ron) that causes voltage drop between the power supply and ADC input:
 
@@ -315,14 +440,14 @@ The CD74HC4067 analog multiplexer has significant on-resistance (Ron) that cause
 
 **This is a known limitation of the CD74HC4067 family.** At 3.3V supply, expect ~100mV measurement error due to the mux on-resistance.
 
-#### Mitigation Options
+##### Mitigation Options
 
 1. **Accept the tolerance** - Tests use 150mV tolerance to account for this
 2. **Software calibration** - Apply per-channel offset correction in firmware
 3. **Buffer amplifier** - Add unity-gain op-amp between mux output and ADC input
 4. **Lower-Ron mux** - Use ADG1606/ADG1607 (~4Ω Ron) for higher accuracy
 
-#### Ground Connections Are Critical
+##### Ground Connections Are Critical
 
 Ensure a proper star ground connection between:
 - Rigol DP832 GND (Channel 3 negative)
@@ -330,37 +455,3 @@ Ensure a proper star ground connection between:
 - Nucleo GND (preferably CN9 pin 14, near analog inputs)
 
 Poor grounding can add additional 30-50mV of error.
-
-## Running Integration Tests
-
-### Prerequisites
-
-```bash
-cd tests/integration
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Physical Hardware Tests
-
-Run tests against real hardware with Rigol DP832 + KB2040 mux:
-
-```bash
-cd tests/integration
-pytest test_adc.py --config=configs/physical.yaml -v
-```
-
-### Virtual Tests (QEMU)
-
-Run tests against QEMU simulator:
-
-```bash
-# First, start QEMU in another terminal
-west build -t run
-
-# Then run tests
-cd tests/integration
-pytest test_adc.py --config=configs/virtual.yaml -v
-```
-

@@ -5,7 +5,8 @@ Generic ADC integration tests.
 These tests work with any DUT/instrument combination defined in the config file.
 Tests use abstract interfaces so they can run against:
 - Virtual: QEMU + VirtualInstrument (adcset injection)
-- Physical: Real hardware, driven by DACs on the board's own I2C bus
+- Virtual PCB: native_sim + DacInstrument (DAC models as separate processes)
+- Physical: Real hardware + DacInstrument (DACs on the board's own I2C bus)
 """
 
 import re
@@ -13,15 +14,14 @@ import time
 
 import pytest
 
-from instruments.virtual import VirtualInstrument
-
 
 # Tolerance for physical hardware tests (in mV)
 # ~100mV accounts for mux on-resistance (~70Ω) and ADC quantization
 PHYSICAL_TOLERANCE = 150
 
-# Default ADC value in virtual mode (0 mV)
-VIRTUAL_DEFAULT_MV = 0
+# Voltage channels are driven back to between tests, where the instrument
+# can do that cheaply (see InstrumentBase.can_reset_channels)
+RESET_MV = 0
 
 
 def parse_channel_value(response: str, channel: int) -> int:
@@ -161,11 +161,10 @@ class TestADCSingleChannel:
             f"(tolerance={PHYSICAL_TOLERANCE})"
         )
 
-        # Reset channel to default for cleanup (virtual mode needs explicit reset)
+        # Leave the channel as we found it, so the next test starts clean
         instrument.enable_output(channel, False)
-        # For virtual instruments, reset to default value
-        if isinstance(instrument, VirtualInstrument):
-            instrument.set_voltage(channel, VIRTUAL_DEFAULT_MV)
+        if instrument.can_reset_channels:
+            instrument.set_voltage(channel, RESET_MV)
 
 
 class TestADCVoltageRange:
@@ -187,11 +186,10 @@ class TestADCVoltageRange:
             f"ch[{channel}]={actual_voltage}mV, expected ~{test_voltage}mV"
         )
 
-        # Reset channel to default for cleanup (virtual mode needs explicit reset)
+        # Leave the channel as we found it, so the next test starts clean
         instrument.enable_output(channel, False)
-        # For virtual instruments, reset to default value
-        if isinstance(instrument, VirtualInstrument):
-            instrument.set_voltage(channel, VIRTUAL_DEFAULT_MV)
+        if instrument.can_reset_channels:
+            instrument.set_voltage(channel, RESET_MV)
 
 
 class TestADCIsolation:
@@ -201,11 +199,10 @@ class TestADCIsolation:
         """Test that driving one channel doesn't affect others."""
         test_voltage = 2000  # mV
 
-        # Reset all channels to default first (important for virtual mode)
-        # This ensures previous tests don't affect this one
-        if isinstance(instrument, VirtualInstrument):
+        # Reset all channels first, so earlier tests can't affect this one
+        if instrument.can_reset_channels:
             for ch in range(num_test_channels):
-                instrument.set_voltage(ch, VIRTUAL_DEFAULT_MV)
+                instrument.set_voltage(ch, RESET_MV)
             wait_for_fresh_sample(dut)  # Let the reset reach the registers
 
         # Drive only the specified channel
@@ -234,8 +231,7 @@ class TestADCIsolation:
                         f"while ch[{driven_channel}] driven at {test_voltage}mV"
                     )
 
-        # Reset channel to default for cleanup
+        # Leave the channel as we found it, so the next test starts clean
         instrument.enable_output(driven_channel, False)
-        # For virtual instruments, reset to default value
-        if isinstance(instrument, VirtualInstrument):
-            instrument.set_voltage(driven_channel, VIRTUAL_DEFAULT_MV)
+        if instrument.can_reset_channels:
+            instrument.set_voltage(driven_channel, RESET_MV)
