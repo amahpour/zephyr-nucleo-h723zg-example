@@ -75,19 +75,17 @@ minicom -D /dev/ttyACM0 -b 115200
 
 **Tip:** If you have multiple USB devices, identify ports by VID/PID using `lsusb` and `udevadm` (Linux) or `ioreg` (macOS). See [Hardware Setup](docs/hardware.md#identifying-device-ports-by-vidpid) for details.
 
-For 15-channel ADC configuration with mux:
-```bash
-west build -b nucleo_h723zg app --pristine -- -DCONFIG_APP_NUM_CH=15
-west flash --runner openocd
-```
-
-See [Hardware Setup](docs/hardware.md) for complete hardware configuration and wiring guide.
+The hardware build is configured for 15 ADC channels and two DAC7578s on I²C1 by
+default. See [Hardware Setup](docs/hardware.md) for the DAC loopback test rig and
+its wiring.
 
 ## Shell Commands
 
-| Command | Description |
-|---------|-------------|
-| `adcregs` | Show ADC register values |
+| Command | Available on | Description |
+|---------|--------------|-------------|
+| `adcregs` | all targets | Show ADC register values |
+| `dacset <ch> <mv>` | hardware, virtual PCB | Drive a DAC channel through the DACx578 driver |
+| `adcset <ch> <mv>` | QEMU only | Inject a value straight into the emulated ADC. Never built for hardware. |
 | `adcset <ch> <mv>` | Inject ADC value (QEMU simulator only, not available on hardware) |
 | `help` | List all commands |
 
@@ -115,7 +113,7 @@ Set ch[0] = 2500 mV
 
 ## Integration Tests
 
-Run automated tests against virtual (QEMU) or physical hardware.
+Run the same tests against QEMU, the virtual PCB, or real hardware.
 
 ### Setup
 
@@ -132,11 +130,14 @@ pip install -r requirements.txt
 # Virtual (QEMU) - start QEMU first, then:
 pytest test_adc.py --config=configs/virtual.yaml -v
 
-# Physical hardware (Nucleo + Rigol DP832 + KB2040 mux):
+# Virtual PCB (native_sim + DAC models as separate processes):
+pytest test_adc.py --config=configs/vpcb.yaml -v
+
+# Physical hardware (Nucleo + DAC loopback rig):
 pytest test_adc.py --config=configs/physical.yaml -v
 ```
 
-See [Hardware Setup](docs/hardware.md) for physical test wiring guide.
+See [Hardware Setup](docs/hardware.md) for the loopback rig wiring.
 
 ## More Documentation
 

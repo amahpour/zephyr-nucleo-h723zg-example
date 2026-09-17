@@ -51,12 +51,10 @@ The pytest fixtures handle:
 
 ### Physical Hardware Testing
 
-For testing with real hardware and a power supply:
+For testing with real hardware on the DAC loopback rig (see [hardware.md](hardware.md)):
 
 ```bash
-# Edit configs/physical.yaml with your settings
-# Then run:
-pip install pyvisa pyvisa-py  # For Rigol DP832 support
+# Set the serial port in configs/physical.yaml, then:
 PYTHONPATH=tests/integration pytest tests/integration/ \
     --config=tests/integration/configs/physical.yaml -v
 ```

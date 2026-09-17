@@ -8,6 +8,13 @@ from abc import ABC, abstractmethod
 class InstrumentBase(ABC):
     """Abstract base for stimulus instruments."""
 
+    #: Whether a channel can be driven back to 0 V between tests at negligible
+    #: cost. Tests use this to isolate themselves from whatever the previous
+    #: test left driven. It is a property of the stimulus, not of whether the
+    #: target is virtual: a DAC on real copper settles in microseconds and
+    #: qualifies, while a bench supply behind an analog mux did not.
+    can_reset_channels: bool = False
+
     @abstractmethod
     def connect(self) -> None:
         """Establish connection to instrument."""

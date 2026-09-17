@@ -79,21 +79,20 @@ def create_instrument(instrument_config: dict, dut):
 
     if inst_type == "virtual":
         return VirtualInstrument(dut)
+    elif inst_type == "dac":
+        from instruments.dac import DacInstrument
+
+        return DacInstrument(dut)
     elif inst_type == "vpcb":
-        # Import here to avoid dependency when not needed
-        from instruments.vpcb import VpcbInstrument
-
-        return VpcbInstrument(dut)
+        raise ValueError(
+            "instrument type 'vpcb' was renamed to 'dac': the same class now "
+            "drives the DACs on real hardware too."
+        )
     elif inst_type == "physical":
-        # Import here to avoid dependency when not needed
-        from instruments.physical import PhysicalInstrument
-
-        psu_config = instrument_config.get("power_supply", {})
-        mux_config = instrument_config.get("mux", {})
-
-        return PhysicalInstrument(
-            psu_config=psu_config,
-            mux_config=mux_config,
+        raise ValueError(
+            "instrument type 'physical' (Rigol DP832 + KB2040 mux) was retired. "
+            "The physical rig is now a DAC loopback: use type 'dac'. "
+            "See docs/hardware.md."
         )
     else:
         raise ValueError(f"Unknown instrument type: {inst_type}")

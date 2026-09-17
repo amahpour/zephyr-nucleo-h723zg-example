@@ -21,7 +21,7 @@ dut:
   boot_timeout: 10.0
 
 instrument:
-  type: vpcb
+  type: dac
 
 # 15 channels, matching CONFIG_APP_NUM_CH and both shipping board configs.
 num_channels: 15

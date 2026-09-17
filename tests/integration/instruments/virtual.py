@@ -20,6 +20,8 @@ class VirtualInstrument(InstrumentBase):
     into the emulated ADC rather than using physical hardware.
     """
 
+    can_reset_channels = True
+
     def __init__(self, dut: DUTBase):
         """
         Initialize virtual instrument.

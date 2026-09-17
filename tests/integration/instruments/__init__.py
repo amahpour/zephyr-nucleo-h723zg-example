@@ -1,11 +1,13 @@
 """
-Instrument abstraction layer for test stimulus (power supplies, virtual injection, etc.)
+Instrument abstraction layer for test stimulus.
+
+VirtualInstrument injects values straight into QEMU's emulated ADC.
+DacInstrument drives the board's own DACx578s, which are wired back into its
+ADC -- on the virtual PCB and on the bench alike.
 """
 
 from .base import InstrumentBase
+from .dac import DacInstrument
 from .virtual import VirtualInstrument
 
-# PhysicalInstrument is imported lazily to avoid equipment dependencies for virtual tests
-# Use: from instruments.physical import PhysicalInstrument
-
-__all__ = ["InstrumentBase", "VirtualInstrument"]
+__all__ = ["InstrumentBase", "DacInstrument", "VirtualInstrument"]
