@@ -83,12 +83,36 @@ jobs:
       - name: Install Python test dependencies
         run: pip install -r tests/integration/requirements.txt
       
-      - name: Run integration tests (pytest)
+      - name: Run integration tests (QEMU)
         run: |
           export ZEPHYR_BASE=~/zephyrproject/zephyr
           cd ${{ github.workspace }}
           PYTHONPATH=tests/integration pytest tests/integration/ \
             --config=tests/integration/configs/virtual.yaml -v
+      
+      # ==================== VIRTUAL PCB ====================
+      # configs/vpcb.yaml and configs/physical.yaml name the same instrument and
+      # differ only in their dut: block, so this is the per-PR run that exercises
+      # the driver path the hardware rig uses: dacset, the DACx578 driver, and
+      # the I2C bus leaving the firmware process for the board and IC processes.
+      - name: Build virtual PCB host processes
+        run: |
+          cd ${{ github.workspace }}
+          cmake -S vpcb -B build-vpcb
+          cmake --build build-vpcb
+      
+      - name: Build native_sim firmware for the virtual PCB
+        run: |
+          source ~/zephyrproject/.venv/bin/activate
+          export ZEPHYR_BASE=~/zephyrproject/zephyr
+          cd ${{ github.workspace }}
+          west build -b native_sim app -d build-vpcb-fw --pristine
+      
+      - name: Run integration tests (virtual PCB)
+        run: |
+          cd ${{ github.workspace }}
+          PYTHONPATH=tests/integration pytest tests/integration/ \
+            --config=tests/integration/configs/vpcb.yaml -v
       
       # ==================== FIRMWARE BUILD ====================
       - name: Build nucleo_h723zg firmware
