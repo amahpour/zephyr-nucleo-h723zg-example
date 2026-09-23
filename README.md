@@ -86,8 +86,7 @@ its wiring.
 | `adcregs` | all targets | Show ADC register values |
 | `dacset <ch> <mv>` | hardware, virtual PCB | Drive a DAC channel through the DACx578 driver |
 | `adcset <ch> <mv>` | QEMU only | Inject a value straight into the emulated ADC. Never built for hardware. |
-| `adcset <ch> <mv>` | Inject ADC value (QEMU simulator only, not available on hardware) |
-| `help` | List all commands |
+| `help` | all targets | List all commands |
 
 Example:
 ```
@@ -138,6 +137,14 @@ pytest test_adc.py --config=configs/physical.yaml -v
 ```
 
 See [Hardware Setup](docs/hardware.md) for the loopback rig wiring.
+
+## Walkthroughs
+
+Follow-along tutorials with copy-pasteable commands and real captured output:
+
+- [Run the virtual PCB](walkthroughs/01-virtual-pcb.md) — build a board out of
+  Linux processes, drive a DAC across a socket, read it back on the ADC, then
+  unplug a chip mid-session and watch the driver report it. No hardware needed.
 
 ## More Documentation
 
