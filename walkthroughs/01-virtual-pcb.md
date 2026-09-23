@@ -317,29 +317,9 @@ Let it go again:
 pkill -CONT -f vpcb-board
 ```
 
-## Step 10 — Cut a trace
-
-Stop everything (`Ctrl-C` the firmware and the board, `pkill -f vpcb-dac7578`),
-delete one line from the netlist — say `0x48 3 3` — and start the stack again.
-
-`dacset 3 2000` now reports `OK`. The write reached the chip, the chip drove its
-output, everything the firmware can observe went perfectly. But `adcregs` shows
-`ch[3]: 0 mV`, because the wire between that DAC output and that ADC input is
-gone.
-
-That's an open circuit, and it's the failure mode nobody writes a test for,
-because a mock can't produce it: every layer reports success and the number is
-still wrong.
-
-Restore the line before moving on:
-
-```bash
-git checkout vpcb/netlists/adc_loopback.txt
-```
-
 ---
 
-## Step 11 — Run the real test suite against it
+## Step 10 — Run the real test suite against it
 
 Everything above was manual. The integration suite does the whole dance for you —
 it starts the board, the chips and the firmware, runs the tests, and tears the
@@ -374,7 +354,7 @@ PYTHONPATH=tests/integration pytest tests/integration/ --config=tests/integratio
 
 ---
 
-## Step 12 — It's just a Linux program
+## Step 11 — It's just a Linux program
 
 Because the firmware is a native executable, host tooling works on it directly.
 Build it under AddressSanitizer and UndefinedBehaviorSanitizer:
@@ -417,10 +397,10 @@ pkill -f 'vpcb-board|vpcb-dac7578'; rm -f /tmp/vpcb.sock
 
 ## What to take away
 
-**The netlist is the design under test.** Firmware bugs are the ones everyone
-tests for. Wiring bugs — the DAC driving a net nothing reads, the part at the
-address nobody talks to — are the ones that eat a bring-up week, and they only
-show up when something outside the firmware owns the connections.
+**Something outside the firmware has to own the connections.** Firmware bugs are
+the ones everyone tests for. The part at the address nobody talks to is the kind
+that eats a bring-up week, and it only shows up when the wiring lives somewhere
+the firmware cannot see — here, a netlist file held by a separate process.
 
 **Absence has to be modelled, not flagged.** A missing chip that you simulate
 with a config option is a chip that's still there. A missing chip that's a

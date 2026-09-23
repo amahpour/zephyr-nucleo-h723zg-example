@@ -80,8 +80,8 @@ lines to see what the driver does when a chip is absent.
 
 Stop everything with `pkill -f 'vpcb-board|vpcb-dac7578'; rm -f /tmp/vpcb.sock`.
 
-For a step-by-step version with the real output at every stage, including three
-ways to break the rig on purpose, see
+For a step-by-step version with the real output at every stage, including
+pulling a chip out mid-session, see
 [walkthroughs/01-virtual-pcb.md](walkthroughs/01-virtual-pcb.md).
 
 ### Physical Hardware (NUCLEO-H723ZG)
