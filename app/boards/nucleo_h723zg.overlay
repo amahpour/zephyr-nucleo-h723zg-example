@@ -40,9 +40,11 @@
  * board and the board DTS already enables it at 400 kHz on PB8 (D15, SCL) and
  * PB9 (D14, SDA), so only the child nodes are added here.
  *
- * Addresses are strapped, not programmed: A1/A0 tied low give 0x48, and both
- * left floating give 0x4c. That keeps the parts at the same two addresses the
- * virtual PCB models, so one firmware image drives either.
+ * Addresses are strapped, not programmed: ADDR1/ADDR0 both tied low give 0x48,
+ * and ADDR1 floating with ADDR0 grounded gives 0x4c. Floating BOTH pins is
+ * listed as not supported and answers at no address at all -- see the full
+ * table in docs/hardware.md. That keeps the parts at the same two addresses
+ * the virtual PCB models, so one firmware image drives either.
  *
  * full-scale-mv is 3300 because the output buffer has a gain of two, so VREFIN
  * must be 1.65 V. Feeding it 3.3 V would ask for a 6.6 V swing the 3.3 V supply
