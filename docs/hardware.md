@@ -111,16 +111,45 @@ two sets of pull-ups in parallel; remove one.
 
 ### Addresses
 
-The DAC7578 address is set by strapping A1/A0, each tied low, left floating, or
-tied high.
+The address is strapped, not programmed. The pins are named **ADDR1/ADDR0** in
+the datasheet, and each is tied low, tied high, or left floating.
 
-| Part | Address | A1 | A0 | Serves board channels |
-|------|---------|----|----|-----------------------|
+| Part | Address | ADDR1 | ADDR0 | Serves board channels |
+|------|---------|-------|-------|-----------------------|
 | U1 | `0x48` | GND | GND | 0–7 |
-| U2 | `0x4c` | float | float | 8–14 (channel 7 unused) |
+| U2 | `0x4c` | **float** | **GND** | 8–14 (channel 7 unused) |
 
 These match the two addresses the virtual PCB models, so one firmware image
-drives either. Confirm the strap table against your breakout before soldering.
+drives either.
+
+**Floating both pins does not give `0x4c`** — the datasheet lists ADDR1 float +
+ADDR0 float as *Not supported*, and a part strapped that way will not answer at
+any address. Only ADDR1 is floated; ADDR0 goes to ground.
+
+Full table for the QFN-24 (RGE) package, from SBAS496B Table 3:
+
+| Address | ADDR1 | ADDR0 |
+|---------|-------|-------|
+| `0x48` | 0 | 0 |
+| `0x49` | 0 | 1 |
+| `0x4a` | 1 | 0 |
+| `0x4b` | 1 | 1 |
+| `0x4c` | float | 0 |
+| `0x4d` | float | 1 |
+| `0x4e` | 0 | float |
+| `0x4f` | 1 | float |
+| — | float | float | *(not supported)* |
+
+The **TSSOP-16 (PW)** package brings out only ADDR0 and offers three addresses:
+`0x48` (GND), `0x4a` (high), `0x4c` (float). If your breakout is the TSSOP part,
+float its single address pin for U2.
+
+Many breakouts fit pull-up or pull-down resistors on the address pins, which
+makes "floating" impossible until you remove them. Check your board before
+soldering: if you cannot float a pin, the alternative is to strap U2 to `0x4a`
+(ADDR1 high, ADDR0 low) and change `reg` in
+[`app/boards/nucleo_h723zg.overlay`](../app/boards/nucleo_h723zg.overlay), the
+`dacs:` list in `tests/integration/configs/vpcb.yaml`, and the netlist.
 
 ### Reference Voltage
 
