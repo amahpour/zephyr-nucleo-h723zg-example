@@ -184,6 +184,8 @@ code {
   border-radius: 2px;
 }
 strong { font-weight: 600; }
+a { color: var(--copper); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--ink); }
 
 /* ---------- figures ---------- */
 figure {
@@ -287,6 +289,177 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- sticky section nav ---------- */
+nav.sections {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--ground) 92%, transparent);
+  backdrop-filter: saturate(150%) blur(8px);
+  border-bottom: 1px solid var(--rule);
+  margin: 0 -24px 38px;
+  padding: 0 24px;
+}
+nav.sections ol {
+  display: flex;
+  gap: 0;
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 1120px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+nav.sections ol::-webkit-scrollbar { display: none; }
+nav.sections a {
+  display: block;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-decoration: none;
+  padding: 14px 16px 12px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+nav.sections a:hover { color: var(--ink); }
+nav.sections a[aria-current="true"] { color: var(--copper); border-bottom-color: var(--copper); }
+nav.sections li:first-child a { padding-left: 0; }
+
+section[id] { scroll-margin-top: 64px; }
+
+/* ---------- process bands ---------- */
+.stack { margin: 30px 0 8px; }
+
+.band {
+  display: grid;
+  grid-template-columns: 172px 1fr;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+.band + .band { border-top: none; }
+
+.band-label {
+  border-right: 1px solid var(--rule);
+  background: var(--surface-2);
+  padding: 16px 16px 14px;
+}
+.band-k {
+  display: block;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 5px;
+}
+.band-n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.band-m {
+  display: block;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 5px;
+  line-height: 1.4;
+}
+
+.band-body {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.unit {
+  min-width: 0;
+  border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--slate);
+  background: var(--ground);
+  padding: 10px 12px;
+}
+.unit.host  { border-left-color: var(--copper); }
+.unit.model { border-left-color: var(--green); }
+.unit.stock { border-style: dashed; border-left-style: solid; border-left-color: var(--ink-3); opacity: .82; }
+.unit-n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+.unit-d {
+  display: block;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+.boundary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 0;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--copper);
+}
+.boundary::before, .boundary::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--rule-strong);
+}
+.boundary span { white-space: nowrap; }
+.boundary em {
+  font-family: var(--mono);
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-2);
+  margin: 16px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--rule);
+}
+.legend span { display: flex; align-items: center; gap: 7px; }
+.legend i { width: 11px; height: 11px; border-left: 3px solid var(--slate); border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong); border-right: 1px solid var(--rule-strong); }
+.legend i.host  { border-left-color: var(--copper); }
+.legend i.model { border-left-color: var(--green); }
+.legend i.stock { border-left-color: var(--ink-3); border-top-style: dashed; border-right-style: dashed; border-bottom-style: dashed; }
+
+@media (max-width: 720px) {
+  .band { grid-template-columns: 1fr; }
+  .band-label { border-right: none; border-bottom: 1px solid var(--rule); }
+  .band-body { grid-template-columns: 1fr; }
+  nav.sections { margin-left: -16px; margin-right: -16px; padding: 0 16px; }
+}
 </style>
 </head>
 <body>
@@ -298,6 +471,18 @@ footer {
   <p class="standfirst">A DAC write leaves the firmware process, crosses a Unix socket, lands in a chip model running as its own program, and comes back as an ADC reading — 1998&nbsp;mV, through three processes.</p>
 </header>
 
+<nav class="sections" aria-label="Sections">
+  <ol>
+    <li><a href="#glance">At a glance</a></li>
+    <li><a href="#loop">The loop</a></li>
+    <li><a href="#firmware">Inside the firmware</a></li>
+    <li><a href="#test">Present vs absent</a></li>
+    <li><a href="#build">How it builds</a></li>
+    <li><a href="#run">Running it</a></li>
+    <li><a href="#remember">Takeaways</a></li>
+  </ol>
+</nav>
+
 <dl class="facts">
   <div class="fact"><dt>OS processes</dt><dd>3</dd></div>
   <div class="fact"><dt>Build systems</dt><dd>2</dd></div>
@@ -306,7 +491,74 @@ footer {
   <div class="fact"><dt>Chip absent</dt><dd>−19 ENODEV</dd></div>
 </dl>
 
-<section>
+<section id="glance">
+  <div class="col">
+    <h2>At a glance</h2>
+    <p class="deck">Which code runs in which process</p>
+    <p>A conventional simulated board is one program: the firmware asks for a voltage and something in the same binary answers. Here the peripherals are separate executables, so an I²C transfer genuinely leaves the firmware's address space. Every box below is a real file; the horizontal rules are real process boundaries.</p>
+  </div>
+
+  <div class="stack">
+    <div class="band">
+      <div class="band-label">
+        <span class="band-k">Process 1</span>
+        <span class="band-n">zephyr.exe</span>
+        <span class="band-m">The firmware, built for <code>native_sim</code></span>
+      </div>
+      <div class="band-body">
+        <div class="unit"><span class="unit-n">app/src/cmd_dac.c</span><span class="unit-d">The <code>dacset</code> shell command. Target-agnostic.</span></div>
+        <div class="unit stock"><span class="unit-n">Zephyr DAC API</span><span class="unit-d">Unmodified <code>dac_write_value()</code></span></div>
+        <div class="unit"><span class="unit-n">app/drivers/dac_dacx578.c</span><span class="unit-d">Real DACx578 driver. Builds the 3-byte command.</span></div>
+        <div class="unit stock"><span class="unit-n">Zephyr I²C API</span><span class="unit-d">Unmodified <code>i2c_write()</code></span></div>
+        <div class="unit"><span class="unit-n">app/drivers/i2c_vpcb.c</span><span class="unit-d">I²C controller driver — <b>top half</b>, Zephyr context</span></div>
+        <div class="unit host"><span class="unit-n">app/drivers/i2c_vpcb_bottom.c</span><span class="unit-d">Same binary, <b>host context</b>: owns the socket, cannot see Zephyr headers</span></div>
+      </div>
+    </div>
+
+    <div class="boundary"><span>AF_UNIX · SOCK_STREAM <em>/tmp/vpcb.sock</em></span></div>
+
+    <div class="band">
+      <div class="band-label">
+        <span class="band-k">Process 2</span>
+        <span class="band-n">vpcb-board</span>
+        <span class="band-m">The PCB itself</span>
+      </div>
+      <div class="band-body">
+        <div class="unit model"><span class="unit-n">address router</span><span class="unit-d">Forwards each transfer to the IC holding that address, or NAKs</span></div>
+        <div class="unit model"><span class="unit-n">net table</span><span class="unit-d">Holds every net's voltage. Survives an IC dying.</span></div>
+        <div class="unit model"><span class="unit-n">netlists/adc_loopback.txt</span><span class="unit-d">The copper: which DAC channel reaches which ADC input</span></div>
+      </div>
+    </div>
+
+    <div class="boundary"><span>Same socket · routed by I²C address</span></div>
+
+    <div class="band">
+      <div class="band-label">
+        <span class="band-k">Processes 3 &amp; 4</span>
+        <span class="band-n">vpcb-dac7578</span>
+        <span class="band-m">One process per physical part</span>
+      </div>
+      <div class="band-body">
+        <div class="unit model"><span class="unit-n">dac7578 @ 0x48</span><span class="unit-d">U1 — board channels 0–7. Decodes the command byte, drives 8 nets.</span></div>
+        <div class="unit model"><span class="unit-n">dac7578 @ 0x4c</span><span class="unit-d">U2 — board channels 8–14. Its 8th output has no netlist entry, so it goes nowhere.</span></div>
+      </div>
+    </div>
+
+    <p class="legend">
+      <span><i></i> Zephyr-side code</span>
+      <span><i class="host"></i> Host-side code, same binary</span>
+      <span><i class="model"></i> Separate executable</span>
+      <span><i class="stock"></i> Stock Zephyr, untouched</span>
+    </p>
+  </div>
+
+  <div class="col">
+    <div class="note"><p>The only thing shared across the boundary is <code>vpcb/include/vpcb/proto.h</code>, which compiles into both sides and is allowed to include nothing but <code>&lt;stdint.h&gt;</code>. If that header ever needs a Zephyr header or a host header, the process boundary has leaked.</p></div>
+    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-19</code> with no rebuild and no mock. And deleting a line from the netlist opens a trace: the write still succeeds, the chip still drives its output, and the ADC still reads zero.</p>
+  </div>
+</section>
+
+<section id="loop">
   <div class="col">
     <h2>The loop</h2>
     <p class="deck">What happens between <code>dacset 0 2000</code> and <code>adcregs</code></p>
@@ -413,7 +665,7 @@ footer {
   </figure>
 </section>
 
-<section>
+<section id="firmware">
   <div class="col">
     <h2>Inside the firmware process</h2>
     <p class="deck">Where Zephyr ends and the host begins</p>
@@ -473,7 +725,7 @@ footer {
   </figure>
 </section>
 
-<section>
+<section id="test">
   <div class="col">
     <h2>The test: chip present, chip absent</h2>
     <p class="deck">Same firmware, same command, one process not started</p>
@@ -587,7 +839,7 @@ dacset ch0 -> dacx578@48 ch0 code=2481 OK
 <span class="c">[board]</span>   reply status=OK rlen=0</div>
 </section>
 
-<section>
+<section id="build">
   <div class="col">
     <h2>How it gets built</h2>
     <p class="deck">Two toolchains that never meet, and the header that joins them</p>
@@ -631,7 +883,7 @@ dacset ch0 -> dacx578@48 ch0 code=2481 OK
   </figure>
 </section>
 
-<section>
+<section id="run">
   <div class="col">
     <h2>Running it</h2>
     <p class="deck">Four processes, started in order</p>
@@ -651,6 +903,10 @@ west build -b native_sim app -d build-vpcb-fw
 
 <span class="c"># omit the two dac7578 lines to get the chip-absent case</span></div>
 
+  <div class="col">
+    <p>There is a step-by-step version of this with the real output at every stage — including killing a chip process mid-session and cutting a trace out of the netlist — in <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/walkthroughs/01-virtual-pcb.md">walkthroughs/01-virtual-pcb.md</a>.</p>
+  </div>
+
   <div class="tablewrap">
     <table>
       <thead>
@@ -669,7 +925,7 @@ west build -b native_sim app -d build-vpcb-fw
   </div>
 </section>
 
-<section>
+<section id="remember">
   <div class="col">
     <h2>Three things worth remembering</h2>
 
@@ -688,9 +944,36 @@ west build -b native_sim app -d build-vpcb-fw
 </section>
 
 <footer>
-  Zephyr v4.4.0-13865-g45bbe613f387 · SDK 1.0.1 · native_sim/native · verified on Linux
+  Zephyr v4.4.2 · SDK 1.0.1 · native_sim/native · verified on Linux
 </footer>
 
 </div>
+<script>
+/* Marks the nav link for whichever section is currently on screen. Purely
+   decorative: every link is a plain anchor and works with this disabled. */
+(function () {
+  var links = [].slice.call(document.querySelectorAll('nav.sections a'));
+  var map = {};
+  var targets = links.map(function (a) {
+    var el = document.querySelector(a.getAttribute('href'));
+    if (el) { map[el.id] = a; }
+    return el;
+  }).filter(Boolean);
+  if (!targets.length || !window.IntersectionObserver) { return; }
+
+  var visible = {};
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting; });
+    var current = null;
+    for (var i = 0; i < targets.length; i++) {
+      if (visible[targets[i].id]) { current = targets[i].id; break; }
+    }
+    links.forEach(function (a) { a.removeAttribute('aria-current'); });
+    if (current && map[current]) { map[current].setAttribute('aria-current', 'true'); }
+  }, { rootMargin: '-56px 0px -65% 0px' });
+
+  targets.forEach(function (el) { obs.observe(el); });
+})();
+</script>
 </body>
 </html>
