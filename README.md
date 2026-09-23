@@ -4,6 +4,14 @@
 
 Periodically samples ADC channels and exposes values via UART shell commands.
 
+The same firmware and the same drivers run three ways: under QEMU, against a
+**virtual PCB** whose chips are separate OS processes, and on a real
+NUCLEO-H723ZG. The tests don't know which one they're talking to.
+
+**[How the virtual PCB works →](https://amahpour.github.io/zephyr-nucleo-h723zg-example/)**
+— an illustrated tour of the three processes, what crosses each boundary, and
+what happens when a chip isn't there.
+
 ## Prerequisites
 
 Install Zephyr RTOS. The Zephyr revision is pinned in [`ZEPHYR_REVISION`](ZEPHYR_REVISION)
@@ -40,6 +48,41 @@ cd ~/code/zephyr-nucleo-h723zg-example
 west build -b qemu_x86 app --pristine
 west build -t run
 ```
+
+### Virtual PCB (native_sim)
+
+The DAC chips run as separate OS processes and the firmware reaches them over a
+Unix socket, so `dacset`, the DACx578 driver and the I²C path all execute exactly
+as they do on hardware. Nothing is mocked and no board is involved.
+
+```bash
+source ~/zephyrproject/.venv/bin/activate
+export ZEPHYR_BASE=~/zephyrproject/zephyr
+
+cd ~/code/zephyr-nucleo-h723zg-example
+
+# the board and chip models - plain host C, no Zephyr involved
+cmake -S vpcb -B build-vpcb && cmake --build build-vpcb
+
+# the firmware
+west build -b native_sim app -d build-vpcb-fw --pristine
+
+# board first (it owns the netlist), then the chips, then the firmware
+./build-vpcb/vpcb-board   --sock /tmp/vpcb.sock --netlist vpcb/netlists/adc_loopback.txt &
+./build-vpcb/vpcb-dac7578 --sock /tmp/vpcb.sock --addr 0x48 &
+./build-vpcb/vpcb-dac7578 --sock /tmp/vpcb.sock --addr 0x4c &
+./build-vpcb-fw/zephyr/zephyr.exe
+```
+
+At the shell, `dacset 0 2000` then `adcregs` reads back 1998 mV — the 2 mV is
+the DAC code and the 12-bit conversion, not an error. Omit the two `vpcb-dac7578`
+lines to see what the driver does when a chip is absent.
+
+Stop everything with `pkill -f 'vpcb-board|vpcb-dac7578'; rm -f /tmp/vpcb.sock`.
+
+For a step-by-step version with the real output at every stage, including three
+ways to break the rig on purpose, see
+[walkthroughs/01-virtual-pcb.md](walkthroughs/01-virtual-pcb.md).
 
 ### Physical Hardware (NUCLEO-H723ZG)
 
@@ -148,9 +191,11 @@ Follow-along tutorials with copy-pasteable commands and real captured output:
 
 ## More Documentation
 
-See [docs/](docs/) for:
-- [Architecture](docs/architecture.md)
-- [Hardware Setup](docs/hardware.md)
+- [**Virtual PCB Test Loop**](https://amahpour.github.io/zephyr-nucleo-h723zg-example/)
+  — the project site, built from [`docs/vpcb-loop.html`](docs/vpcb-loop.html)
+  and published on every push to `main` that touches `docs/`
+- [Architecture](docs/architecture.md) — how the target layer picks a backend at build time
+- [Hardware Setup](docs/hardware.md) — the DAC loopback rig and its wiring
 - [Python Serial Testing](docs/serial-testing.md)
 
 ## License
