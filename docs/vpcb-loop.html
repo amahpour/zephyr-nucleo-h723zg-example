@@ -554,7 +554,7 @@ section[id] { scroll-margin-top: 64px; }
 
   <div class="col">
     <div class="note"><p>The only thing shared across the boundary is <code>vpcb/include/vpcb/proto.h</code>, which compiles into both sides and is allowed to include nothing but <code>&lt;stdint.h&gt;</code>. If that header ever needs a Zephyr header or a host header, the process boundary has leaked.</p></div>
-    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-19</code> with no rebuild and no mock. And deleting a line from the netlist opens a trace: the write still succeeds, the chip still drives its output, and the ADC still reads zero.</p>
+    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-19</code> with no rebuild and no mock. The board holds the net voltages, not the chips, so a net keeps its last value even after the part driving it is gone.</p>
   </div>
 </section>
 
@@ -904,7 +904,7 @@ west build -b native_sim app -d build-vpcb-fw
 <span class="c"># omit the two dac7578 lines to get the chip-absent case</span></div>
 
   <div class="col">
-    <p>There is a step-by-step version of this with the real output at every stage — including killing a chip process mid-session and cutting a trace out of the netlist — in <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/walkthroughs/01-virtual-pcb.md">walkthroughs/01-virtual-pcb.md</a>.</p>
+    <p>There is a step-by-step version of this with the real output at every stage — including killing a chip process mid-session and wedging the board — in <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/walkthroughs/01-virtual-pcb.md">walkthroughs/01-virtual-pcb.md</a>.</p>
   </div>
 
   <div class="tablewrap">
