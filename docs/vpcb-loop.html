@@ -684,11 +684,11 @@ section[id] { scroll-margin-top: 64px; }
         <!-- app row -->
         <rect x="60" y="24" width="330" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="225" y="48" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="currentColor">src/cmd_dac.c</text>
-        <text x="225" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">dacset — channel map, mV → code</text>
+        <text x="225" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">the dacset command — millivolts in, chip code out</text>
 
         <rect x="510" y="24" width="330" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="675" y="48" text-anchor="middle" font-family="var(--mono)" font-size="13" fill="currentColor">targets/vpcb/adc_backend.c</text>
-        <text x="675" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">sampling thread — reads the net</text>
+        <text x="675" y="68" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">the sampling loop — reads the voltage back</text>
 
         <!-- API row -->
         <rect x="60" y="118" width="330" height="48" fill="var(--surface-2)" stroke="var(--rule-strong)" stroke-width="1"/>
@@ -703,19 +703,19 @@ section[id] { scroll-margin-top: 64px; }
         <!-- top half -->
         <rect x="60" y="204" width="780" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="450" y="228" text-anchor="middle" font-family="var(--mono)" font-size="14" font-weight="700" fill="currentColor">i2c_vpcb.c — TOP</text>
-        <text x="450" y="248" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">Zephyr headers · Zephyr libc · no sockets allowed here</text>
+        <text x="450" y="248" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">built with Zephyr's headers · not allowed to open a socket</text>
 
         <line x1="225" y1="166" x2="225" y2="202" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
         <line x1="675" y1="166" x2="675" y2="202" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
 
         <!-- compile boundary -->
         <line x1="40" y1="286" x2="860" y2="286" stroke="var(--slate)" stroke-width="2" stroke-dasharray="7 5"/>
-        <text x="450" y="279" text-anchor="middle" font-family="var(--sans)" font-size="12" font-weight="600" fill="var(--slate)">compile-context boundary — target_sources(native_simulator INTERFACE …)</text>
+        <text x="450" y="279" text-anchor="middle" font-family="var(--sans)" font-size="12" font-weight="600" fill="var(--slate)">the build boundary — these two halves never share a header</text>
 
         <!-- bottom half -->
         <rect x="60" y="304" width="780" height="56" fill="none" stroke="currentColor" stroke-width="1.5"/>
         <text x="450" y="328" text-anchor="middle" font-family="var(--mono)" font-size="14" font-weight="700" fill="currentColor">i2c_vpcb_bottom.c — BOTTOM</text>
-        <text x="450" y="348" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">host headers · socket() connect() poll() · wall-clock timeout</text>
+        <text x="450" y="348" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="var(--ink-3)">built like an ordinary Linux program · owns the connection</text>
 
         <line x1="450" y1="360" x2="450" y2="392" stroke="var(--copper)" stroke-width="2" marker-end="url(#ar2)"/>
         <text x="470" y="386" font-family="var(--mono)" font-size="12" fill="var(--copper)">→ vpcb-board</text>
