@@ -41,6 +41,7 @@ enum vpcb_status {
 	VPCB_ETIMEOUT = 2,
 	VPCB_EPROTO   = 3,
 	VPCB_ENONET   = 4, /* net not present in the netlist */
+	VPCB_UNDRIVEN = 5, /* net exists but nothing drives it: floating */
 };
 
 /* Every message is this header followed by `len` bytes of payload. */
@@ -96,6 +97,7 @@ static inline const char *vpcb_status_str(uint16_t s)
 	case VPCB_ETIMEOUT: return "TIMEOUT";
 	case VPCB_EPROTO:   return "EPROTO";
 	case VPCB_ENONET:   return "ENONET";
+	case VPCB_UNDRIVEN: return "UNDRIVEN";
 	default:            return "?";
 	}
 }
