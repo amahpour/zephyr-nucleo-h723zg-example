@@ -45,9 +45,7 @@ static void sample_thread_entry(void *p1, void *p2, void *p3)
     while (1) {
         ret = adc_backend_sample_all(samples, valid);
         if (ret == 0) {
-            /* valid[] has nowhere to go yet: struct adc_regs has no field
-             * for it. */
-            regs_update(samples);
+            regs_update(samples, valid);
         } else {
             LOG_ERR("ADC sample failed: %d", ret);
         }

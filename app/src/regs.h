@@ -8,6 +8,7 @@
 #define REGS_H_
 
 #include <zephyr/kernel.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef CONFIG_APP_NUM_CH
@@ -24,6 +25,7 @@
  */
 struct adc_regs {
     int32_t mv[NUM_CH];             /* Latest mV per channel */
+    bool valid[NUM_CH];             /* Is mv[i] a real reading? */
     uint32_t seq;                   /* Sequence number, increments each update */
     int64_t last_sample_uptime_ms;  /* Timestamp of last update (k_uptime_get()) */
 };
@@ -40,9 +42,10 @@ void regs_init(void);
  *
  * Thread-safe. Updates all channel values atomically.
  *
- * @param mv Array of NUM_CH millivolt values
+ * @param mv    Array of NUM_CH millivolt values
+ * @param valid Array of NUM_CH: false where there is no real reading
  */
-void regs_update(const int32_t mv[NUM_CH]);
+void regs_update(const int32_t mv[NUM_CH], const bool valid[NUM_CH]);
 
 /**
  * @brief Read the current register file state

@@ -22,7 +22,12 @@ static int cmd_adcregs(const struct shell *sh, size_t argc, char **argv)
     shell_print(sh, "  channels:");
 
     for (int i = 0; i < NUM_CH; i++) {
-        shell_print(sh, "    ch[%d]: %d mV", i, snapshot.mv[i]);
+        if (snapshot.valid[i]) {
+            shell_print(sh, "    ch[%d]: %d mV", i, snapshot.mv[i]);
+        } else {
+            /* Not a number: there is no reading to show. */
+            shell_print(sh, "    ch[%d]: ---", i);
+        }
     }
 
     return 0;
