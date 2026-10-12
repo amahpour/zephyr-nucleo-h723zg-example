@@ -24,11 +24,34 @@
 
 #include "vpcb/proto.h"
 
+/* Writing to a socket whose peer has gone raises SIGPIPE, and the default
+ * action kills the process with no message. For the firmware that meant a
+ * board restart took the DUT down with it. Every write here must instead fail
+ * with EPIPE so the caller can report it. Linux suppresses the signal per call
+ * with MSG_NOSIGNAL; macOS has no such flag and needs SO_NOSIGPIPE set on the
+ * socket once, which vpcb_nosigpipe() does for every fd these helpers create.
+ */
+#ifdef MSG_NOSIGNAL
+#define VPCB_SEND_FLAGS MSG_NOSIGNAL
+#else
+#define VPCB_SEND_FLAGS 0
+#endif
+
+static inline void vpcb_nosigpipe(int fd)
+{
+#ifdef SO_NOSIGPIPE
+	int one = 1;
+	setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#else
+	(void)fd;
+#endif
+}
+
 static inline int vpcb_write_all(int fd, const void *buf, size_t len)
 {
 	const uint8_t *p = (const uint8_t *)buf;
 	while (len) {
-		ssize_t n = write(fd, p, len);
+		ssize_t n = send(fd, p, len, VPCB_SEND_FLAGS);
 		if (n < 0) {
 			if (errno == EINTR) { continue; }
 			return -1;
@@ -98,6 +121,15 @@ static inline int vpcb_connect(const char *path)
 		close(fd);
 		return -1;
 	}
+	vpcb_nosigpipe(fd);
+	return fd;
+}
+
+/* accept() wrapper so board-side fds get the same SIGPIPE treatment. */
+static inline int vpcb_accept(int lfd)
+{
+	int fd = accept(lfd, NULL, NULL);
+	if (fd >= 0) { vpcb_nosigpipe(fd); }
 	return fd;
 }
 
