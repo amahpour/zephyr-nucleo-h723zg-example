@@ -149,7 +149,7 @@ int adc_backend_init(void)
 #endif
 }
 
-int adc_backend_sample_all(int32_t out_mv[NUM_CH])
+int adc_backend_sample_all(int32_t out_mv[NUM_CH], bool out_valid[NUM_CH])
 {
 #if ADC_CONFIGURED
     int ret;
@@ -168,7 +168,9 @@ int adc_backend_sample_all(int32_t out_mv[NUM_CH])
             LOG_ERR("ADC read failed for channel %d (ADC channel %d): %d", 
                     i, channel_cfgs[i].channel_id, ret);
             out_mv[i] = 0;
+            out_valid[i] = false;
         } else {
+            out_valid[i] = true;
             int32_t raw = sample_buffer[i];
             out_mv[i] = (raw * ADC_REF_MV) / ((1 << ADC_RESOLUTION) - 1);
         }
@@ -177,9 +179,10 @@ int adc_backend_sample_all(int32_t out_mv[NUM_CH])
     return 0;
 
 #else
-    /* Return zeros when not configured */
+    /* No ADC configured: there is no reading to report, so report none. */
     for (int i = 0; i < NUM_CH; i++) {
         out_mv[i] = 0;
+        out_valid[i] = false;
     }
     return 0;
 #endif

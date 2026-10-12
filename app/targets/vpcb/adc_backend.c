@@ -29,7 +29,7 @@ LOG_MODULE_REGISTER(adc_backend_vpcb, LOG_LEVEL_INF);
 static const struct device *adc_dev;
 static struct adc_channel_cfg channel_cfgs[NUM_CH];
 static int16_t sample_buffer[NUM_CH];
-static bool    net_down[NUM_CH];
+static int     net_err[NUM_CH];   /* 0, or why the net was unreadable */
 
 #define ADC_REF_MV     3300
 #define ADC_RESOLUTION 12
@@ -45,22 +45,24 @@ static int vpcb_value_func(const struct device *dev, unsigned int chan,
 	ARG_UNUSED(data);
 
 	ret = vpcb_net_read_mv(chan, &mv);
-	if (ret != 0) {
-		/* Net unreadable - report 0 V but say so, loudly. Once per change
-		 * of state, not once per sample: a board that is down for a few
-		 * seconds would otherwise print every channel ten times a second. */
-		if (chan < NUM_CH && !net_down[chan]) {
+	if (chan < NUM_CH && ret != net_err[chan]) {
+		/* Log changes of state, not every sample. */
+		if (ret != 0) {
 			LOG_WRN("net %u unreadable (%d)", chan, ret);
-			net_down[chan] = true;
+		} else {
+			LOG_INF("net %u readable again", chan);
 		}
-		*result = 0;
-		return 0;
 	}
-	if (chan < NUM_CH && net_down[chan]) {
-		LOG_INF("net %u readable again", chan);
-		net_down[chan] = false;
+	if (chan < NUM_CH) {
+		net_err[chan] = ret;
 	}
-	*result = (uint32_t)mv;
+	/* The conversion itself still succeeds, as it would on silicon: an ADC
+	 * converts whatever is on the pin, floating or not. What the virtual
+	 * PCB adds is that it KNOWS the pin was floating - net_err records that
+	 * so sample_all can mark the reading invalid instead of discarding it.
+	 * Failing the read here would also make adc_emul log an error per
+	 * sample for as long as the trace stays cut. */
+	*result = (ret == 0) ? (uint32_t)mv : 0;
 	return 0;
 }
 
@@ -99,7 +101,7 @@ int adc_backend_init(void)
 	return 0;
 }
 
-int adc_backend_sample_all(int32_t out_mv[NUM_CH])
+int adc_backend_sample_all(int32_t out_mv[NUM_CH], bool out_valid[NUM_CH])
 {
 	int ret;
 
@@ -115,7 +117,9 @@ int adc_backend_sample_all(int32_t out_mv[NUM_CH])
 		if (ret < 0) {
 			LOG_ERR("ADC read failed for channel %d: %d", i, ret);
 			out_mv[i] = 0;
+			out_valid[i] = false;
 		} else {
+			out_valid[i] = (net_err[i] == 0);
 			int32_t raw = sample_buffer[i];
 			out_mv[i] = (raw * ADC_REF_MV) / ((1 << ADC_RESOLUTION) - 1);
 		}

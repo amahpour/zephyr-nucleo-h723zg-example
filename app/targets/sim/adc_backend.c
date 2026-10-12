@@ -76,7 +76,7 @@ int adc_backend_init(void)
     return 0;
 }
 
-int adc_backend_sample_all(int32_t out_mv[NUM_CH])
+int adc_backend_sample_all(int32_t out_mv[NUM_CH], bool out_valid[NUM_CH])
 {
     int ret;
 
@@ -92,7 +92,9 @@ int adc_backend_sample_all(int32_t out_mv[NUM_CH])
         if (ret < 0) {
             LOG_ERR("ADC read failed for channel %d: %d", i, ret);
             out_mv[i] = 0;
+            out_valid[i] = false;
         } else {
+            out_valid[i] = true;
             /* Convert raw value to millivolts */
             int32_t raw = sample_buffer[i];
             out_mv[i] = (raw * ADC_REF_MV) / ((1 << ADC_RESOLUTION) - 1);
