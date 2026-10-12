@@ -34,7 +34,6 @@ LOG_MODULE_REGISTER(i2c_vpcb, CONFIG_I2C_LOG_LEVEL);
 #define VPCB_DEFAULT_SOCK "/tmp/vpcb.sock"
 
 static char vpcb_sock_path[128] = VPCB_DEFAULT_SOCK;
-static bool vpcb_ready;
 
 /* Set by --vpcb-sock. Points into argv, so it is only read during init. */
 static char *vpcb_sock_opt;
@@ -79,11 +78,6 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 
 	ARG_UNUSED(dev);
 
-	if (!vpcb_ready) {
-		LOG_ERR("virtual PCB not attached");
-		return -EIO;
-	}
-
 	/* Flatten: concatenate writes, allow a single trailing read. */
 	for (uint8_t i = 0; i < num_msgs; i++) {
 		if (msgs[i].flags & I2C_MSG_READ) {
@@ -117,6 +111,13 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 			VPCB_XFER_TIMEOUT_MS, addr);
 		return -EIO;
 	}
+	if (st == VPCB_BOTTOM_DETACHED) {
+		/* Also the harness, not the bus: the board process is not running.
+		 * The bottom half reattaches by itself once it is back. */
+		LOG_ERR("virtual PCB detached (addr 0x%02x) - board process is not "
+			"running; will reattach when it returns", addr);
+		return -EIO;
+	}
 	if (st < 0) {
 		LOG_ERR("transport failure to virtual PCB");
 		return -EIO;
@@ -147,8 +148,6 @@ int vpcb_net_read_mv(uint32_t net, int32_t *millivolts)
 {
 	int32_t uv;
 	int st;
-
-	if (!vpcb_ready) { return -EIO; }
 
 	st = vpcb_bottom_net_get(net, &uv, VPCB_XFER_TIMEOUT_MS);
 	if (st == VPCB_BOTTOM_NO_REPLY) {
@@ -184,13 +183,12 @@ static int i2c_vpcb_init(const struct device *dev)
 
 	if (vpcb_bottom_connect(vpcb_sock_path, "zephyr-mcu") != 0) {
 		LOG_ERR("could not attach to virtual PCB at %s", vpcb_sock_path);
-		vpcb_ready = false;
 		/* Not fatal: a board that is not running should look like a bus
-		 * with nothing on it, not a boot failure.
+		 * with nothing on it, not a boot failure. The bottom half keeps
+		 * retrying, so starting the board afterwards still works.
 		 */
 		return 0;
 	}
-	vpcb_ready = true;
 	LOG_INF("attached to virtual PCB at %s", vpcb_sock_path);
 	return 0;
 }

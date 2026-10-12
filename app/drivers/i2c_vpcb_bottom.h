@@ -22,6 +22,15 @@ extern "C" {
  */
 #define VPCB_BOTTOM_NO_REPLY (-2)
 
+/* The connection to the board is gone - its process exited or restarted - and
+ * a reattach has not succeeded yet. Also a harness condition, not a bus one.
+ * The bottom half retries the attach on later calls, at most every
+ * VPCB_BOTTOM_REATTACH_MS of host time, so a restarted board is picked up
+ * without restarting the firmware.
+ */
+#define VPCB_BOTTOM_DETACHED (-3)
+#define VPCB_BOTTOM_REATTACH_MS 500
+
 int  vpcb_bottom_connect(const char *path, const char *name);
 int  vpcb_bottom_i2c(uint16_t addr, const uint8_t *w, uint16_t wlen,
 		     uint8_t *r, uint16_t rlen, int timeout_ms);

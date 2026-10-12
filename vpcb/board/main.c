@@ -186,7 +186,12 @@ static void route_i2c(struct peer *mcu, uint16_t seq, uint8_t *pl, uint32_t len)
 			continue;
 		}
 		if (rh.type == VPCB_MSG_I2C_REPLY) {
-			break;
+			if (rh.seq == seq) { break; }
+			/* A late reply to a transfer we already timed out on - the IC
+			 * was stopped and has since resumed. Relaying it would hand the
+			 * MCU an answer to the wrong question. */
+			logd("  dropping stale reply seq=%u from %s (want %u)", rh.seq, ic->name, seq);
+			continue;
 		}
 		logd("  ignoring msg type %u from %s while awaiting reply", rh.type, ic->name);
 	}
@@ -236,15 +241,28 @@ int main(int argc, char **argv)
 			if (!(pfds[k].revents & (POLLIN | POLLHUP))) { continue; }
 
 			if (map[k] < 0) { /* new connection */
-				int cfd = accept(lfd, NULL, NULL);
+				int cfd = vpcb_accept(lfd);
 				if (cfd < 0) { continue; }
-				if (n_peers < MAX_PEERS) {
-					peers[n_peers].fd = cfd;
-					peers[n_peers].role = 0;
-					snprintf(peers[n_peers].name, VPCB_NAME_LEN, "peer%d", n_peers);
-					n_peers++;
-					logd("peer connected (fd=%d)", cfd);
-				} else { close(cfd); }
+				/* Reuse a slot freed by a disconnect before growing the table.
+				 * Peers come and go - an IC cycled for an intermittent fault
+				 * reconnects every time - so never reusing slots would run out
+				 * of MAX_PEERS after a handful of cycles and start refusing
+				 * chips that are perfectly healthy. */
+				int slot = -1;
+				for (int i = 0; i < n_peers; i++) {
+					if (peers[i].fd < 0) { slot = i; break; }
+				}
+				if (slot < 0 && n_peers < MAX_PEERS) { slot = n_peers++; }
+				if (slot < 0) {
+					logd("peer table full (%d), refusing connection", MAX_PEERS);
+					close(cfd);
+					continue;
+				}
+				peers[slot].fd = cfd;
+				peers[slot].role = 0;
+				peers[slot].addr = 0;
+				snprintf(peers[slot].name, VPCB_NAME_LEN, "peer%d", slot);
+				logd("peer connected (fd=%d)", cfd);
 				continue;
 			}
 

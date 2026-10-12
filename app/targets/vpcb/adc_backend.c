@@ -29,6 +29,7 @@ LOG_MODULE_REGISTER(adc_backend_vpcb, LOG_LEVEL_INF);
 static const struct device *adc_dev;
 static struct adc_channel_cfg channel_cfgs[NUM_CH];
 static int16_t sample_buffer[NUM_CH];
+static bool    net_down[NUM_CH];
 
 #define ADC_REF_MV     3300
 #define ADC_RESOLUTION 12
@@ -45,10 +46,19 @@ static int vpcb_value_func(const struct device *dev, unsigned int chan,
 
 	ret = vpcb_net_read_mv(chan, &mv);
 	if (ret != 0) {
-		/* Net unreadable - report 0 V but say so, loudly. */
-		LOG_WRN("net %u unreadable (%d)", chan, ret);
+		/* Net unreadable - report 0 V but say so, loudly. Once per change
+		 * of state, not once per sample: a board that is down for a few
+		 * seconds would otherwise print every channel ten times a second. */
+		if (chan < NUM_CH && !net_down[chan]) {
+			LOG_WRN("net %u unreadable (%d)", chan, ret);
+			net_down[chan] = true;
+		}
 		*result = 0;
 		return 0;
+	}
+	if (chan < NUM_CH && net_down[chan]) {
+		LOG_INF("net %u readable again", chan);
+		net_down[chan] = false;
 	}
 	*result = (uint32_t)mv;
 	return 0;
