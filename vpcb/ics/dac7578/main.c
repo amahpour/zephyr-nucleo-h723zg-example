@@ -179,6 +179,45 @@ static uint16_t handle_write(int fd, const uint8_t *w, uint16_t wlen)
 	return VPCB_OK;
 }
 
+/* Connect and introduce ourselves. Returns the fd, or -1. */
+static int attach(const char *sock)
+{
+	int fd = vpcb_connect(sock);
+	if (fd < 0) { return -1; }
+
+	struct vpcb_hello he = { .version = VPCB_PROTO_VERSION, .role = VPCB_ROLE_IC,
+				 .i2c_addr = my_addr };
+	snprintf(he.name, VPCB_NAME_LEN, "%s", my_name);
+	struct vpcb_hdr h;
+	uint8_t pl[VPCB_MAX_PAYLOAD];
+	if (vpcb_send(fd, VPCB_MSG_HELLO, 0, &he, sizeof(he)) != 0 ||
+	    vpcb_recv(fd, &h, pl, sizeof(pl), 2000) != 0 || h.type != VPCB_MSG_HELLO_ACK) {
+		close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+/* The board went away. A real chip does not lose its registers because the
+ * test harness restarted, so wait for a board to come back, re-register, and
+ * drive our current outputs onto its (fresh, undriven) nets. Exiting instead
+ * would leave a restarted board with a netlist and no chips, every address
+ * NAKing, which is what issue #31 reported. */
+static int reattach(const char *sock)
+{
+	logd("lost the board, waiting for it to come back");
+	for (;;) {
+		struct timespec ts = { .tv_sec = 0, .tv_nsec = 200 * 1000 * 1000 };
+		nanosleep(&ts, NULL);
+		int fd = attach(sock);
+		if (fd >= 0) {
+			logd("reattached, re-driving outputs");
+			for (int c = 0; c < NCH; c++) { push_net(fd, c); }
+			return fd;
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	const char *sock = "/tmp/vpcb.sock";
@@ -194,19 +233,17 @@ int main(int argc, char **argv)
 	}
 	snprintf(my_name, sizeof(my_name), "dac7578@%02X", my_addr);
 
-	int fd = vpcb_connect(sock);
-	if (fd < 0) { fprintf(stderr, "%s: connect(%s): %s\n", my_name, sock, strerror(errno)); return 1; }
-
-	struct vpcb_hello he = { .version = VPCB_PROTO_VERSION, .role = VPCB_ROLE_IC,
-				 .i2c_addr = my_addr };
-	snprintf(he.name, VPCB_NAME_LEN, "%s", my_name);
-	vpcb_send(fd, VPCB_MSG_HELLO, 0, &he, sizeof(he));
+	/* The first attach fails fast: no board at startup is a setup mistake
+	 * worth hearing about, not something to wait out. Only a board that
+	 * disappears after we attached is waited for. */
+	int fd = attach(sock);
+	if (fd < 0) {
+		fprintf(stderr, "%s: cannot attach to board at %s: %s\n", my_name, sock, strerror(errno));
+		return 1;
+	}
 
 	struct vpcb_hdr h;
 	uint8_t pl[VPCB_MAX_PAYLOAD];
-	if (vpcb_recv(fd, &h, pl, sizeof(pl), 2000) != 0 || h.type != VPCB_MSG_HELLO_ACK) {
-		fprintf(stderr, "%s: no HELLO_ACK\n", my_name); return 1;
-	}
 	logd("attached: %d-bit, VREF=%d uV, full-scale=%d uV (gain-of-2 buffer)%s",
 	     resolution, vref_uv, 2 * vref_uv,
 	     (offset_uv || gain_ppm) ? ", error injection ON" : ", ideal");
@@ -215,7 +252,11 @@ int main(int argc, char **argv)
 
 	for (;;) {
 		int r = vpcb_recv(fd, &h, pl, sizeof(pl), -1);
-		if (r != 0) { logd("board closed the connection, exiting"); break; }
+		if (r != 0) {
+			close(fd);
+			fd = reattach(sock);
+			continue;
+		}
 		if (h.type != VPCB_MSG_I2C_XFER) { continue; }
 
 		struct vpcb_i2c_xfer *x = (struct vpcb_i2c_xfer *)pl;
