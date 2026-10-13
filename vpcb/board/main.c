@@ -13,10 +13,18 @@
  *   mis-strapped.
  *
  *   NET_SET from an IC carries an IC-LOCAL channel index. A real chip does not
- *   know what its pins are wired to, so the board resolves (addr, channel)
- *   through the netlist to a board net.
+ *   know what its pins are wired to, so the board records what each chip is
+ *   driving on each of its own pins, and works out a net's voltage only when
+ *   asked, by following the netlist from the net back to whatever pin feeds
+ *   it. A net with no connected, driving pin is floating.
+ *
+ *   Because nets are derived rather than stored, the netlist is live: send
+ *   SIGHUP and the board re-reads it. Cutting or restoring a trace takes
+ *   effect on the next sample, with nothing restarted - which is what lets a
+ *   fault matrix rewire the board dozens of times in a few seconds.
  */
 
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,12 +37,15 @@
 #define MAX_PEERS 16
 #define MAX_NETS  64
 #define MAX_LINKS 64
+#define MAX_PINS  16  /* output pins per IC we keep state for */
 
 struct peer {
 	int      fd;
 	uint16_t role;
 	uint16_t addr;
 	char     name[VPCB_NAME_LEN];
+	int32_t  pin_uv[MAX_PINS];     /* what this IC drives on each output pin */
+	uint8_t  pin_driven[MAX_PINS]; /* ...and whether it has driven it at all */
 };
 
 struct link { uint16_t addr; uint16_t chan; uint32_t net; };
@@ -43,9 +54,9 @@ static struct peer peers[MAX_PEERS];
 static int         n_peers;
 static struct link links[MAX_LINKS];
 static int         n_links;
-static int32_t     nets[MAX_NETS];
-static int         net_driven[MAX_NETS];
 static int         verbose = 1;
+static const char *netlist_path;
+static volatile sig_atomic_t reload_requested;
 
 static double now_ms(void)
 {
@@ -123,20 +134,57 @@ static int load_netlist(const char *path)
 	return 0;
 }
 
+static void on_sighup(int sig)
+{
+	(void)sig;
+	reload_requested = 1;
+}
+
+static void reload_netlist(void)
+{
+	reload_requested = 0;
+	if (!netlist_path) {
+		logd("SIGHUP ignored: started without --netlist");
+		return;
+	}
+	if (load_netlist(netlist_path) != 0) {
+		logd("SIGHUP: cannot read %s, keeping the old wiring", netlist_path);
+		return;
+	}
+	logd("netlist reloaded from %s (%d links)", netlist_path, n_links);
+}
+
+/* The voltage on a net, found by following the netlist back to whichever
+ * connected IC pin feeds it. Returns 0 and fills *uv, or -1 if nothing
+ * connected is driving the net. */
+static int net_value(uint32_t net, int32_t *uv)
+{
+	for (int i = 0; i < n_links; i++) {
+		if (links[i].net != net || links[i].chan >= MAX_PINS) { continue; }
+		struct peer *ic = find_ic(links[i].addr);
+		if (ic && ic->pin_driven[links[i].chan]) {
+			*uv = ic->pin_uv[links[i].chan];
+			return 0;
+		}
+	}
+	return -1;
+}
+
 static void handle_net_set(struct peer *p, uint8_t *pl)
 {
 	struct vpcb_net_set *s = (struct vpcb_net_set *)pl;
 	uint32_t net;
 
+	/* Record the pin whatever it is wired to: a later rewire may connect it. */
+	if (s->net < MAX_PINS) {
+		p->pin_uv[s->net] = s->microvolts;
+		p->pin_driven[s->net] = 1;
+	}
 	if (resolve_net(p->addr, (uint16_t)s->net, &net) != 0) {
 		logd("NET_SET %s ch%u -> not in netlist, dropped", p->name, s->net);
 		return;
 	}
-	if (net < MAX_NETS) {
-		nets[net] = s->microvolts;
-		net_driven[net] = 1;
-		logd("NET_SET %s ch%u -> net%u = %d uV", p->name, s->net, net, s->microvolts);
-	}
+	logd("NET_SET %s ch%u -> net%u = %d uV", p->name, s->net, net, s->microvolts);
 }
 
 /* A chip that is gone - unpowered, unplugged, its process killed - drives
@@ -145,12 +193,12 @@ static void handle_net_set(struct peer *p, uint8_t *pl)
 static void release_nets(struct peer *p)
 {
 	for (int i = 0; i < n_links; i++) {
-		if (links[i].addr == p->addr && links[i].net < MAX_NETS &&
-		    net_driven[links[i].net]) {
-			net_driven[links[i].net] = 0;
+		if (links[i].addr == p->addr && links[i].chan < MAX_PINS &&
+		    p->pin_driven[links[i].chan]) {
 			logd("  net%u released - %s no longer drives it", links[i].net, p->name);
 		}
 	}
+	memset(p->pin_driven, 0, sizeof(p->pin_driven));
 }
 
 /* Forward an MCU transfer to the owning IC and relay its reply.
@@ -226,6 +274,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "-q"))                        { verbose = 0; }
 	}
 
+	netlist_path = nl;
 	if (nl && load_netlist(nl) == 0) {
 		logd("netlist loaded from %s (%d links)", nl, n_links);
 	} else {
@@ -239,6 +288,13 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < MAX_PEERS; i++) { peers[i].fd = -1; }
 
+	/* No SA_RESTART: SIGHUP must interrupt poll() so the reload happens now,
+	 * not whenever the next message arrives. */
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = on_sighup;
+	sigaction(SIGHUP, &sa, NULL);
+
 	for (;;) {
 		struct pollfd pfds[MAX_PEERS + 1];
 		int map[MAX_PEERS + 1], np = 0;
@@ -249,6 +305,7 @@ int main(int argc, char **argv)
 			pfds[np].fd = peers[i].fd; pfds[np].events = POLLIN; map[np] = i; np++;
 		}
 
+		if (reload_requested) { reload_netlist(); }
 		if (poll(pfds, np, -1) < 0) { if (errno == EINTR) continue; break; }
 
 		for (int k = 0; k < np; k++) {
@@ -275,6 +332,7 @@ int main(int argc, char **argv)
 				peers[slot].fd = cfd;
 				peers[slot].role = 0;
 				peers[slot].addr = 0;
+				memset(peers[slot].pin_driven, 0, sizeof(peers[slot].pin_driven));
 				snprintf(peers[slot].name, VPCB_NAME_LEN, "peer%d", slot);
 				logd("peer connected (fd=%d)", cfd);
 				continue;
@@ -315,8 +373,7 @@ int main(int argc, char **argv)
 				struct vpcb_net_get *g = (struct vpcb_net_get *)pl;
 				struct vpcb_net_value v = { .net = g->net, .microvolts = 0,
 							    .status = VPCB_ENONET };
-				if (g->net < MAX_NETS && net_driven[g->net]) {
-					v.microvolts = nets[g->net];
+				if (g->net < MAX_NETS && net_value(g->net, &v.microvolts) == 0) {
 					v.status = VPCB_OK;
 				} else if (g->net < MAX_NETS) {
 					/* Undriven net: floating. There is no voltage to
