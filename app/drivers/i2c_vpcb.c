@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(i2c_vpcb, CONFIG_I2C_LOG_LEVEL);
 #define VPCB_ST_OK       0
 #define VPCB_ST_NAK      1
 #define VPCB_ST_TIMEOUT  2
+#define VPCB_ST_UNDRIVEN 5
 
 #define VPCB_XFER_TIMEOUT_MS 1000
 
@@ -160,6 +161,9 @@ int vpcb_net_read_mv(uint32_t net, int32_t *millivolts)
 		return -EIO;
 	}
 	if (st < 0)  { return -EIO; }
+	/* Floating is not the same fault as "not in the netlist": the net
+	 * exists, nothing is driving it. */
+	if (st == VPCB_ST_UNDRIVEN) { return -ENODATA; }
 	if (st != VPCB_ST_OK) { return -ENODEV; }
 
 	*millivolts = uv / 1000;

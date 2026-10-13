@@ -17,6 +17,8 @@ void regs_init(void)
 {
     k_mutex_lock(&regs_mutex, K_FOREVER);
 
+    /* Zeroing also leaves every channel invalid: nothing has been sampled
+     * yet, and 0 mV would be a claim. */
     memset(&regs, 0, sizeof(regs));
     regs.seq = 0;
     regs.last_sample_uptime_ms = 0;
@@ -24,12 +26,13 @@ void regs_init(void)
     k_mutex_unlock(&regs_mutex);
 }
 
-void regs_update(const int32_t mv[NUM_CH])
+void regs_update(const int32_t mv[NUM_CH], const bool valid[NUM_CH])
 {
     k_mutex_lock(&regs_mutex, K_FOREVER);
 
     for (int i = 0; i < NUM_CH; i++) {
         regs.mv[i] = mv[i];
+        regs.valid[i] = valid[i];
     }
     regs.seq++;
     regs.last_sample_uptime_ms = k_uptime_get();

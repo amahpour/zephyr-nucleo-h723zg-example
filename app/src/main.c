@@ -37,14 +37,15 @@ static void sample_thread_entry(void *p1, void *p2, void *p3)
     ARG_UNUSED(p3);
 
     int32_t samples[NUM_CH];
+    bool valid[NUM_CH];
     int ret;
 
     LOG_INF("Sampling thread started (period=%d ms)", SAMPLE_PERIOD_MS);
 
     while (1) {
-        ret = adc_backend_sample_all(samples);
+        ret = adc_backend_sample_all(samples, valid);
         if (ret == 0) {
-            regs_update(samples);
+            regs_update(samples, valid);
         } else {
             LOG_ERR("ADC sample failed: %d", ret);
         }

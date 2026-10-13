@@ -139,6 +139,20 @@ static void handle_net_set(struct peer *p, uint8_t *pl)
 	}
 }
 
+/* A chip that is gone - unpowered, unplugged, its process killed - drives
+ * nothing. Its nets go back to floating rather than holding the last voltage
+ * it set, which no real trace would do once its driver disappeared. */
+static void release_nets(struct peer *p)
+{
+	for (int i = 0; i < n_links; i++) {
+		if (links[i].addr == p->addr && links[i].net < MAX_NETS &&
+		    net_driven[links[i].net]) {
+			net_driven[links[i].net] = 0;
+			logd("  net%u released - %s no longer drives it", links[i].net, p->name);
+		}
+	}
+}
+
 /* Forward an MCU transfer to the owning IC and relay its reply.
  *
  * An IC drives its nets whenever it likes - the analog domain is genuinely
@@ -273,6 +287,7 @@ int main(int argc, char **argv)
 			if (r != 0) {
 				logd("peer %s disconnected%s", p->name,
 				     p->role == VPCB_ROLE_IC ? " (its address now NAKs)" : "");
+				if (p->role == VPCB_ROLE_IC) { release_nets(p); }
 				close(p->fd); p->fd = -1;
 				continue;
 			}
@@ -304,9 +319,9 @@ int main(int argc, char **argv)
 					v.microvolts = nets[g->net];
 					v.status = VPCB_OK;
 				} else if (g->net < MAX_NETS) {
-					/* Undriven net: floating. Model as 0 V for now. */
-					v.microvolts = 0;
-					v.status = VPCB_OK;
+					/* Undriven net: floating. There is no voltage to
+					 * report, so say that instead of inventing 0 V. */
+					v.status = VPCB_UNDRIVEN;
 				}
 				vpcb_send(p->fd, VPCB_MSG_NET_VALUE, h.seq, &v, sizeof(v));
 				break;
