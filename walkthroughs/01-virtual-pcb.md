@@ -24,7 +24,7 @@ Here the peripherals are separate programs:
 | Process | What it is |
 |---|---|
 | `zephyr.exe` | Your firmware, compiled for `native_sim`. A normal Linux executable. |
-| `vpcb-board` | The PCB. Owns the netlist, routes I²C by address, holds net voltages. |
+| `vpcb-board` | The PCB. Owns the netlist, routes I²C by address, works out each net's voltage from what's wired to it. |
 | `vpcb-dac7578` ×2 | One process per DAC chip, at I²C addresses `0x48` and `0x4c`. |
 
 They talk over a Unix domain socket. The firmware's I²C transfers genuinely leave
@@ -245,7 +245,11 @@ pkill -f 'vpcb-dac7578 --sock /tmp/vpcb.sock --addr 0x48'
 The board notices immediately:
 
 ```
-[board 597984959.492] peer dac7578@48 disconnected (its address now NAKs)
+[board 1226992578.017] peer dac7578@48 disconnected (its address now NAKs)
+[board 1226992578.037]   net0 released - dac7578@48 no longer drives it
+[board 1226992578.040]   net1 released - dac7578@48 no longer drives it
+...
+[board 1226992578.046]   net7 released - dac7578@48 no longer drives it
 ```
 
 Now ask the firmware to do the exact same thing that worked a minute ago:
@@ -275,9 +279,19 @@ Two more things worth checking while it's broken:
 adcregs
 ```
 
-Channel 0 still reads `1998 mV`. The DAC is gone, but its last output is still
-sitting on the net — the board holds net state, not the chip. Charge on a trace
-doesn't vanish because a part died.
+```
+    ch[0]: ---
+    ch[1]: ---
+    ...
+    ch[7]: ---
+    ch[8]: 0 mV
+```
+
+All eight of that chip's channels read `---`, not a number. The board saw the
+chip leave, and a net with nothing driving it is floating — there is no voltage
+to report, so the firmware reports that there is no reading rather than
+inventing one. [Walkthrough 2](02-fault-injection.md) is about exactly that
+distinction, and why real hardware can't make it.
 
 ```
 dacset 8 1500
