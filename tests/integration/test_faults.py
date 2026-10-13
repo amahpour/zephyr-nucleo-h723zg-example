@@ -101,8 +101,11 @@ LIMITS = [("--offset-uv", "4000"), ("--offset-uv", "-4000"),
 @pytest.fixture(scope="class")
 def rig(test_config, request):
     # Decide before asking for the DUT, so other configs skip without booting one.
-    if test_config.get("dut", {}).get("type") != "native_sim":
+    dut_cfg = test_config.get("dut", {})
+    if dut_cfg.get("type") != "native_sim":
         pytest.skip("fault injection needs the virtual PCB (configs/vpcb.yaml)")
+    if sorted(dut_cfg.get("dacs", list(CHIPS))) != sorted(CHIPS):
+        pytest.skip("the fault matrix is written for the two-DAC board (configs/vpcb.yaml)")
     dut = request.getfixturevalue("dut")
     drive(dut, range(15))
     return dut

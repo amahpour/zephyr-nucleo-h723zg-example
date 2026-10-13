@@ -1,0 +1,28 @@
+# Virtual PCB, built like the single-breakout bench rig.
+#
+# One DAC7578 at its factory address (0x4c) drives ADC channels 0-7. This is
+# the virtual twin of configs/physical.yaml: same chip count, same address,
+# same channel count, same instrument. Run this before powering the real one.
+#
+# The firmware needs the matching build - one DAC in its devicetree:
+#   cmake -S vpcb -B build-vpcb && cmake --build build-vpcb
+#   west build -b native_sim app -d build-vpcb-fw-one-dac -- \
+#       -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=1
+#
+# Usage: pytest tests/integration/ --config=tests/integration/configs/vpcb-one-dac.yaml -v
+
+dut:
+  type: native_sim
+  binary: build-vpcb-fw-one-dac/zephyr/zephyr.exe
+  vpcb_dir: build-vpcb
+  netlist: vpcb/netlists/adc_loopback_one_dac.txt
+  dacs:
+    - "0x4c"
+  boot_timeout: 10.0
+
+instrument:
+  type: dac
+
+# One 8-channel DAC. The firmware still samples all 15 ADC channels; the
+# other seven have nothing wired to them and are not tested.
+num_channels: 8

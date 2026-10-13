@@ -10,7 +10,15 @@
  * provides an adc_emul instance at &adc0; widen it to the 15 channels this
  * application samples and give it the 3.3 V reference the DAC full-scale is
  * matched to.
+ *
+ * Two DACs by default. Build with one - the same rig as a bench with a single
+ * breakout - by adding:   -- -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=1
+ * and run it against vpcb/netlists/adc_loopback_one_dac.txt.
  */
+
+#ifndef APP_DAC_COUNT
+#define APP_DAC_COUNT 2
+#endif
 
 / {
     vpcb_i2c: i2c-vpcb {
@@ -20,6 +28,19 @@
         #size-cells = <0>;
         clock-frequency = <100000>;
 
+#if APP_DAC_COUNT == 1
+        /* One DAC7578 at the breakout's factory address serves channels 0-7.
+         * Channels 8-14 are still sampled; nothing drives them.
+         */
+        dac_u1: dacx578@4c {
+            compatible = "ti,dacx578";
+            reg = <0x4c>;
+            #io-channel-cells = <1>;
+            resolution = <12>;
+            full-scale-mv = <3300>;
+            status = "okay";
+        };
+#else
         /* Two DAC7578s cover the 15 channels the application samples:
          * 0x48 serves 0-7, 0x4c serves 8-14.
          */
@@ -40,6 +61,7 @@
             full-scale-mv = <3300>;
             status = "okay";
         };
+#endif
     };
 };
 
