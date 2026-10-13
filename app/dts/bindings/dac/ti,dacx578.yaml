@@ -7,8 +7,9 @@ description: |
   DAC5578 (8-bit), DAC6578 (10-bit) and DAC7578 (12-bit). Set the resolution
   property to select the part.
 
-  The output stage is a resistor-string DAC feeding a gain-of-two buffer, so
-  full-scale output is twice the reference voltage rather than equal to it.
+  The output stage is a resistor-string DAC followed by a unity-gain buffer:
+  VOUT = (code / 2^n) x VREFIN, so full-scale output equals the reference
+  voltage (datasheet SBAS496B, Equation 1).
 
 compatible: "ti,dacx578"
 
@@ -30,8 +31,8 @@ properties:
     type: int
     required: true
     description: |
-      Full-scale output in millivolts, i.e. twice the reference voltage
-      applied to VREFIN, clamped by AVDD. Applications use this to convert
+      Full-scale output in millivolts, i.e. the reference voltage applied
+      to VREFIN, which cannot exceed AVDD. Applications use this to convert
       between millivolts and DAC codes.
 
 io-channel-cells:

@@ -106,8 +106,11 @@ already enables it at 400 kHz, so nothing extra is needed in firmware.
 | GND | — | GND | CN7-8 |
 | VDD | — | 3V3 | Arduino power header (CN8) |
 
-**Pull-ups:** fit exactly one set on the bus. Two breakouts wired in parallel put
-two sets of pull-ups in parallel; remove one.
+**Pull-ups:** leave both breakouts' pull-ups fitted. The Adafruit board has
+10 kΩ on SDA and SCL; two in parallel make 5 kΩ, which is what a 400 kHz bus
+wants. The fast-mode limit is a 300 ns rise time, and 10 kΩ on its own only
+meets that below roughly 35 pF of bus capacitance — easy to exceed with jumper
+wires. An earlier version of this page said to remove one set; don't.
 
 ### Addresses
 
@@ -153,15 +156,32 @@ soldering: if you cannot float a pin, the alternative is to strap U2 to `0x4a`
 
 ### Reference Voltage
 
-The DAC7578 output buffer has a **gain of two**, so full-scale output is twice
-VREFIN. `full-scale-mv` in the overlay is `3300`, which means **VREFIN must be
-1.65 V**.
+Full-scale output **equals VREFIN**. The datasheet's Equation 1 is
 
-Feeding VREFIN 3.3 V asks for a 6.6 V swing that a 3.3 V supply cannot deliver:
-every code above mid-scale clips, silently. Check how your breakout wires
-VREFIN. If it ties it to VDD, either supply 1.65 V to VREFIN or change
-`full-scale-mv` in `app/boards/nucleo_h723zg.overlay` to match what the part
-can actually produce.
+    VOUT = (code / 2^n) × VREFIN
+
+with a unity-gain output buffer. `full-scale-mv` in the overlay is `3300`, so
+**VREFIN must be 3.3 V** — the same rail that powers the part.
+
+> **Correction.** This page used to say the output buffer has a gain of two and
+> that VREFIN must be 1.65 V. That was wrong: there is no gain stage. A rig
+> built to those instructions reads every channel at half its set voltage.
+
+On the Adafruit DAC7578 breakout this needs no work at all: its `Vrf` jumper
+ties the reference to VCC by default, so powering the board from the Nucleo's
+3V3 pin gives a 3.3 V reference. **Leave the `Vrf` jumper intact.** If you do
+use a different reference, change `full-scale-mv` in
+`app/boards/nucleo_h723zg.overlay` to match it.
+
+### Adafruit Breakout: What to Change
+
+| Board | Address jumper | `Vrf` jumper | Result |
+|-------|----------------|--------------|--------|
+| U1 | Bridge centre pad to **GND** | Leave intact | `0x48`, 3.3 V full scale |
+| U2 | **Leave open** (the default) | Leave intact | `0x4c`, 3.3 V full scale |
+
+One solder bridge in total, on U1. Power both from 3V3, not 5 V: a 5 V supply
+would raise the reference to 5 V and drive the ADC inputs past their limit.
 
 ### DAC-to-ADC Wiring
 
