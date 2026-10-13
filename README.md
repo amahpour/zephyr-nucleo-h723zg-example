@@ -126,7 +126,7 @@ its wiring.
 
 | Command | Available on | Description |
 |---------|--------------|-------------|
-| `adcregs` | all targets | Show ADC register values |
+| `adcregs` | all targets | Show ADC register values. A channel with no real reading - a failed read, or on the virtual PCB a floating net - shows `---` instead of a number. |
 | `dacset <ch> <mv>` | hardware, virtual PCB | Drive a DAC channel through the DACx578 driver |
 | `adcset <ch> <mv>` | QEMU only | Inject a value straight into the emulated ADC. Never built for hardware. |
 | `help` | all targets | List all commands |
@@ -177,6 +177,10 @@ pytest test_adc.py --config=configs/vpcb.yaml -v
 
 # Physical hardware (Nucleo + DAC loopback rig):
 pytest test_adc.py --config=configs/physical.yaml -v
+
+# Fault matrix - 28 hardware faults injected into a running virtual PCB.
+# Virtual PCB only; skipped on every other config.
+pytest test_faults.py --config=configs/vpcb.yaml -v
 ```
 
 See [Hardware Setup](docs/hardware.md) for the loopback rig wiring.
@@ -188,6 +192,9 @@ Follow-along tutorials with copy-pasteable commands and real captured output:
 - [Run the virtual PCB](walkthroughs/01-virtual-pcb.md) — build a board out of
   Linux processes, drive a DAC across a socket, read it back on the ADC, then
   unplug a chip mid-session and watch the driver report it. No hardware needed.
+- [Fault injection](walkthroughs/02-fault-injection.md) — cut a trace on a
+  running board, pull and mis-strap chips, and check the firmware says which
+  readings are real. Then run 28 hardware faults in about 23 seconds.
 
 ## More Documentation
 

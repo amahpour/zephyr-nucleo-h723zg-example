@@ -258,6 +258,7 @@ td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 }
 .pill.ok   { background: var(--copper-soft); color: var(--copper); }
 .pill.nak  { background: var(--oxide-soft);  color: var(--oxide); }
+.pill.mid  { background: var(--surface-2);   color: var(--ink-2); }
 
 /* ---------- notes ---------- */
 .note {
@@ -391,6 +392,9 @@ section[id] { scroll-margin-top: 64px; }
 }
 .unit.host  { border-left-color: var(--copper); }
 .unit.model { border-left-color: var(--green); }
+.unit-d code { white-space: nowrap; }
+.unit.before { border-left-color: var(--oxide); }
+.unit.after  { border-left-color: var(--green); }
 .unit.stock { border-style: dashed; border-left-style: solid; border-left-color: var(--ink-3); opacity: .82; }
 .unit-n {
   display: block;
@@ -452,6 +456,8 @@ section[id] { scroll-margin-top: 64px; }
 .legend i { width: 11px; height: 11px; border-left: 3px solid var(--slate); border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule-strong); border-right: 1px solid var(--rule-strong); }
 .legend i.host  { border-left-color: var(--copper); }
 .legend i.model { border-left-color: var(--green); }
+.legend i.before { border-left-color: var(--oxide); }
+.legend i.after  { border-left-color: var(--green); }
 .legend i.stock { border-left-color: var(--ink-3); border-top-style: dashed; border-right-style: dashed; border-bottom-style: dashed; }
 
 @media (max-width: 720px) {
@@ -477,6 +483,7 @@ section[id] { scroll-margin-top: 64px; }
     <li><a href="#loop">The loop</a></li>
     <li><a href="#firmware">Inside the firmware</a></li>
     <li><a href="#test">Present vs absent</a></li>
+    <li><a href="#faults">When the board lies</a></li>
     <li><a href="#build">How it builds</a></li>
     <li><a href="#run">Running it</a></li>
     <li><a href="#remember">Takeaways</a></li>
@@ -554,7 +561,7 @@ section[id] { scroll-margin-top: 64px; }
 
   <div class="col">
     <div class="note"><p>The only thing shared across the boundary is <code>vpcb/include/vpcb/proto.h</code>, which compiles into both sides and is allowed to include nothing but <code>&lt;stdint.h&gt;</code>. If that header ever needs a Zephyr header or a host header, the process boundary has leaked.</p></div>
-    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-19</code> with no rebuild and no mock. The board holds the net voltages, not the chips, so a net keeps its last value even after the part driving it is gone.</p>
+    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-19</code> with no rebuild and no mock. A net is whatever is wired to it right now: the board works each one out from the netlist on demand, so once a chip is gone its nets float, and the firmware reports <code>---</code> rather than a voltage nobody is driving.</p>
   </div>
 </section>
 
@@ -798,7 +805,7 @@ section[id] { scroll-margin-top: 64px; }
         <text x="554" y="209" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--oxide)">I²C write FAILED (−19) — did not ACK</text>
 
         <text x="536" y="256" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">−19 is −ENODEV, produced by a real NAK crossing a</text>
-        <text x="536" y="274" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">real process boundary. ch[0] stays at 0 mV.</text>
+        <text x="536" y="274" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">real process boundary. ch[0] reads ---, not 0 mV.</text>
       </svg>
     </div>
     <figcaption><b>Figure 3 — the one edge that differs.</b> Everything is identical except whether the <code>vpcb-dac7578</code> process exists. The board owns address routing, so an unclaimed address is answered with NAK rather than silence — the firmware's error path runs for real, unmocked.</figcaption>
@@ -822,7 +829,7 @@ dacset ch0 -> dacx578@48 ch0 code=2481 OK
 <span class="e">E: addr 0x48 NAK - no device on the virtual bus</span>
 <span class="e">dacset ch0: write to dacx578@48 FAILED (-19) - device did not ACK</span>
 <span class="p">uart:~$</span> <span class="o">adcregs</span>
-    ch[0]: 0 mV</div>
+    ch[0]: <span class="hl">---</span></div>
 
   <div class="col">
     <h3>What the board and chip processes log</h3>
@@ -837,6 +844,93 @@ dacset ch0 -> dacx578@48 ch0 code=2481 OK
 <span class="c">[dac48]</span>   ch0 code=2481 -> <span class="hl">1999340 uV</span> (net push)
 <span class="c">[board]</span> NET_SET dac7578@48 ch0 -> net0 = 1999340 uV
 <span class="c">[board]</span>   reply status=OK rlen=0</div>
+</section>
+
+<section id="faults">
+  <div class="col">
+    <h2>When the board lies</h2>
+    <p class="deck">Three places the truth used to die, and the matrix that checks it no longer does</p>
+    <p>Cut one trace and the firmware used to print <code>ch[3]: 0 mV</code> &mdash; exactly what it prints for a channel genuinely at zero volts. The write succeeded, the chip was fine, the log was silent. The answer to <em>is this reading real?</em> existed at the bottom of the stack and was thrown away three separate times on the way up. Fixing any one layer alone would not have been enough.</p>
+  </div>
+
+  <div class="stack">
+    <div class="band">
+      <div class="band-label">
+        <span class="band-k">Layer 1</span>
+        <span class="band-n">vpcb-board</span>
+        <span class="band-m">The board model</span>
+      </div>
+      <div class="band-body">
+        <div class="unit before"><span class="unit-n">floating net &rarr; 0&nbsp;&micro;V, OK</span><span class="unit-d">&ldquo;Undriven net: floating. Model as 0 V for now.&rdquo; The model had the firmware&rsquo;s bug.</span></div>
+        <div class="unit after"><span class="unit-n">floating net &rarr; UNDRIVEN</span><span class="unit-d">A new status, and no invented voltage. Nets are worked out from the netlist on demand, so a chip that leaves stops driving them.</span></div>
+      </div>
+    </div>
+
+    <div class="boundary"><span>socket &middot; the answer crosses into the firmware</span></div>
+
+    <div class="band">
+      <div class="band-label">
+        <span class="band-k">Layer 2</span>
+        <span class="band-n">adc_backend.c</span>
+        <span class="band-m">QEMU, virtual PCB and hardware alike</span>
+      </div>
+      <div class="band-body">
+        <div class="unit before"><span class="unit-n">log, write 0, return success</span><span class="unit-d">The caller could not tell a failed channel from one at 0&nbsp;V.</span></div>
+        <div class="unit after"><span class="unit-n">per-channel validity flag</span><span class="unit-d">Returned beside every millivolt value. A failed read, or a net the board says is floating, comes back invalid.</span></div>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="band-label">
+        <span class="band-k">Layer 3</span>
+        <span class="band-n">regs.h &middot; adcregs</span>
+        <span class="band-m">The register file</span>
+      </div>
+      <div class="band-body">
+        <div class="unit before"><span class="unit-n">mv[], seq, timestamp</span><span class="unit-d">No field for it. Nowhere to put the truth even once every layer below told it.</span></div>
+        <div class="unit after"><span class="unit-n">valid[] beside mv[]</span><span class="unit-d">Every number carries &ldquo;is this real?&rdquo; next to &ldquo;what is it?&rdquo; &mdash; and <code>adcregs</code> prints <code>---</code>.</span></div>
+      </div>
+    </div>
+
+    <p class="legend">
+      <span><i class="before"></i> Before</span>
+      <span><i class="after"></i> After</span>
+    </p>
+  </div>
+
+  <div class="term"><span class="c">── 0x48 3 3 deleted from the netlist; the firmware is not rebuilt ──</span>
+<span class="p">uart:~$</span> <span class="o">dacset 3 1500</span>
+dacset ch3 -> dacx578@48 ch3 code=1861 OK
+<span class="p">uart:~$</span> <span class="o">adcregs</span>
+    ch[2]: 1498 mV
+    ch[3]: <span class="hl">---</span>
+    ch[4]: 1498 mV</div>
+
+  <div class="col">
+    <h3>The fault matrix</h3>
+    <p>28 hardware faults injected into one running firmware, with the board put back after each. The board re-reads its netlist on <code>SIGHUP</code>, so a trace is cut or crossed in milliseconds without restarting anything. The rule every case enforces: <code>adcregs</code> shows the right number or <code>---</code>, never a confident wrong one.</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Cases</th><th>Fault</th><th>Real hardware could detect it?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="num">15</td><td>One trace cut, on each channel</td><td><span class="pill nak">TWIN-ONLY</span> copper reads a floating pin as some number</td></tr>
+        <tr><td class="num">3</td><td>Two wires crossed, one pair between chips</td><td><span class="pill ok">YES</span> by driving distinct values &mdash; no flag can see it</td></tr>
+        <tr><td class="num">2</td><td>A chip pulled</td><td><span class="pill mid">PARTLY</span> the &minus;19 yes, the <code>---</code> no</td></tr>
+        <tr><td class="num">2</td><td>A chip strapped to the wrong address</td><td><span class="pill ok">YES</span> &minus;19 on the write, a real 0&nbsp;V on the pins</td></tr>
+        <tr><td class="num">4</td><td>A DAC at each datasheet offset and gain limit</td><td><span class="pill ok">YES</span> real parts land in here</td></tr>
+        <tr><td class="num">2</td><td>A chip dropping out; a trace opening and closing</td><td><span class="pill mid">PARTLY</span> / <span class="pill nak">TWIN-ONLY</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <div class="note"><p><b>The labels were tested, not asserted.</b> Run against firmware without the three layers, the 19 cases that rely on the board knowing a net is floating all fail &mdash; each reports its fault as a confident 0&nbsp;mV &mdash; and the 9 bench-detectable cases still pass.</p></div>
+    <p>That split is the honest boundary of this twin. A floating pin is something the virtual board can see and a real ADC cannot, so the <code>twin-only</code> cases will not carry over to the bench. Everything else does: the &minus;19, the crossed wires, the datasheet budget, and every layer passing along &ldquo;not a real reading&rdquo; when a read genuinely fails.</p>
+  </div>
 </section>
 
 <section id="build">
@@ -916,7 +1010,7 @@ west build -b native_sim app -d build-vpcb-fw
         <tr><td>Chip present — ch[0]</td><td class="num">1998 mV</td><td><span class="pill ok">PASS</span> target 2000, 1 LSB ≈ 0.806 mV</td></tr>
         <tr><td>Chip present — ch[3]</td><td class="num">998 mV</td><td><span class="pill ok">PASS</span> target 1000</td></tr>
         <tr><td>Chip absent — write</td><td class="num">−19</td><td><span class="pill nak">NAK</span> −ENODEV, error path ran</td></tr>
-        <tr><td>Chip absent — ch[0]</td><td class="num">0 mV</td><td><span class="pill ok">PASS</span> no phantom reading</td></tr>
+        <tr><td>Chip absent — ch[0]</td><td class="num">---</td><td><span class="pill ok">PASS</span> no reading, rather than a made-up 0 mV</td></tr>
         <tr><td>Unit tests (twister)</td><td class="num">4 / 4</td><td><span class="pill ok">PASS</span> no regression</td></tr>
         <tr><td>Integration (QEMU)</td><td class="num">38 / 38</td><td><span class="pill ok">PASS</span> 76.68 s</td></tr>
         <tr><td>nucleo_h723zg build</td><td class="num">5.64%</td><td><span class="pill ok">PASS</span> flash used, still compiles</td></tr>
