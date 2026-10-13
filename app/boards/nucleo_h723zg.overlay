@@ -46,9 +46,9 @@
  * table in docs/hardware.md. That keeps the parts at the same two addresses
  * the virtual PCB models, so one firmware image drives either.
  *
- * full-scale-mv is 3300 because the output buffer has a gain of two, so VREFIN
- * must be 1.65 V. Feeding it 3.3 V would ask for a 6.6 V swing the 3.3 V supply
- * cannot deliver, and every code above mid-scale would silently clip.
+ * full-scale-mv is 3300 because full scale equals VREFIN (datasheet Equation 1:
+ * VOUT = code / 2^n x VREFIN) and the rig ties VREFIN to the 3.3 V supply. If
+ * your reference is something else, this number must change with it.
  */
 &i2c1 {
 	status = "okay";

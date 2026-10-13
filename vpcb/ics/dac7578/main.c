@@ -8,8 +8,12 @@
  * DAC5578.h in kb2040-dac7578-controller, cross-checked against the TI
  * datasheet tables (command/access byte = C3:C0 | A3:A0, data left-justified).
  *
- * Transfer function follows the datasheet output stage: a resistor-string DAC
- * feeding a gain-of-two output buffer, so full scale = 2 x VREF.
+ * Transfer function is the datasheet's Equation 1 (SBAS496B):
+ *     VOUT = (DIN / 2^n) x VREFIN
+ * a resistor-string DAC followed by a unity-gain rail-to-rail buffer, so full
+ * scale is VREFIN itself. An earlier version of this model claimed a
+ * gain-of-two buffer and a 1.65 V reference; the two errors cancelled, so the
+ * voltages were right and the stated reason was wrong.
  */
 
 #include <stdarg.h>
@@ -40,7 +44,7 @@ static uint16_t dac_reg[NCH];
 static uint8_t  ldac_mask = 0xFF;  /* 1 = ignore LDAC pin, update immediately */
 static uint8_t  pd_mode[NCH];      /* PD1:PD0, 0 = normal */
 static int      resolution = 12;
-static int      vref_uv    = 1650000; /* x2 buffer -> 3.3 V full scale */
+static int      vref_uv    = 3300000; /* VREFIN; full scale equals it    */
 static int      offset_uv;            /* datasheet: 0.5 mV typ, +/-4 mV max */
 static int      gain_ppm;             /* datasheet: +/-0.15 % FSR max       */
 static int      verbose = 1;
@@ -63,10 +67,10 @@ static void logd(const char *fmt, ...)
 	fputc('\n', stderr); fflush(stderr);
 }
 
-/* code -> output microvolts, including the gain-of-2 buffer and error terms. */
+/* code -> output microvolts, including the datasheet error terms. */
 static int32_t code_to_uv(uint16_t code, int ch)
 {
-	long long full = 2LL * vref_uv;               /* gain-of-two buffer */
+	long long full = vref_uv;                     /* full scale = VREFIN */
 	long long maxc = (1LL << resolution) - 1;
 	long long uv   = (long long)code * full / maxc;
 
@@ -244,8 +248,8 @@ int main(int argc, char **argv)
 
 	struct vpcb_hdr h;
 	uint8_t pl[VPCB_MAX_PAYLOAD];
-	logd("attached: %d-bit, VREF=%d uV, full-scale=%d uV (gain-of-2 buffer)%s",
-	     resolution, vref_uv, 2 * vref_uv,
+	logd("attached: %d-bit, VREFIN=%d uV (= full scale)%s",
+	     resolution, vref_uv,
 	     (offset_uv || gain_ppm) ? ", error injection ON" : ", ideal");
 
 	do_reset(fd);
