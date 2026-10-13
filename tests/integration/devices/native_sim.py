@@ -60,7 +60,14 @@ class NativeSimDevice(DUTBase):
             tempfile.gettempdir(), f"vpcb-{os.getpid()}-{id(self):x}.sock"
         )
 
+        # The board gets its own copy of the netlist, so a test can rewire it
+        # without ever touching the tracked file in vpcb/netlists/.
+        self._live_netlist = Path(self._sock + ".netlist")
+
         self._helpers = []          # board + IC processes
+        self._board = None          # the board process, for SIGHUP/SIGSTOP
+        self._ics = {}              # i2c address -> IC process
+        self._ic_args = {}          # i2c address -> extra model arguments
         self._fw = None             # firmware process
         self._buf = ""              # console text accumulated by the reader thread
         self._lock = threading.Lock()
@@ -117,14 +124,17 @@ class NativeSimDevice(DUTBase):
         if os.path.exists(self._sock):
             os.unlink(self._sock)
 
+        self._live_netlist.write_text(self._netlist.read_text())
+
         # The board owns the netlist, so it has to be listening before any
         # IC or the firmware tries to attach.
-        self._spawn_helper([str(board), "--sock", self._sock,
-                            "--netlist", str(self._netlist)])
+        self._board = self._spawn_helper([str(board), "--sock", self._sock,
+                                          "--netlist", str(self._live_netlist), "-q"])
         self._wait_for_socket()
 
         for addr in self._dacs:
-            self._spawn_helper([str(dac), "--sock", self._sock, "--addr", addr, "-q"])
+            self._ics[addr] = self._spawn_helper(
+                [str(dac), "--sock", self._sock, "--addr", addr, "-q"])
         time.sleep(0.3)  # let the ICs announce themselves and drive their nets
 
         self._fw = subprocess.Popen(
@@ -211,15 +221,72 @@ class NativeSimDevice(DUTBase):
         for proc in reversed(self._helpers):
             self._kill(proc)
         self._helpers = []
+        self._board = None
+        self._ics = {}
+        self._ic_args = {}
 
         if self._reader is not None:
             self._reader.join(timeout=2)
             self._reader = None
 
-        try:
-            os.unlink(self._sock)
-        except OSError:
-            pass
+        for path in (self._sock, self._live_netlist):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+    # ------------------------------------------------------- fault injection
+    #
+    # Everything here changes the virtual hardware while the firmware keeps
+    # running, the way a fault appears on a real board: nothing is rebuilt,
+    # nothing is mocked. These only exist on the virtual PCB - there is no
+    # equivalent call for a physical DUT, by design.
+
+    def netlist_lines(self) -> list:
+        """The intact wiring, as `addr chan net` lines."""
+        return [l for l in self._netlist.read_text().splitlines()
+                if l.split("#")[0].strip()]
+
+    def rewire(self, lines=None) -> None:
+        """Replace the board's wiring, live. None restores the intact netlist.
+
+        The board re-reads its netlist on SIGHUP and works out every net from
+        whatever is now connected, so a cut or a swap takes effect on the next
+        sample. Callers should wait for a fresh sample before reading.
+        """
+        text = self._netlist.read_text() if lines is None else "\n".join(lines) + "\n"
+        self._live_netlist.write_text(text)
+        os.kill(self._board.pid, signal.SIGHUP)
+        time.sleep(0.05)  # the board handles it on its next poll wakeup
+
+    def kill_ic(self, addr: str) -> None:
+        """Remove a chip: its address stops answering and its nets float."""
+        proc = self._ics.pop(addr, None)
+        self._ic_args.pop(addr, None)
+        self._kill(proc)
+        if proc in self._helpers:
+            self._helpers.remove(proc)
+
+    def start_ic(self, addr: str, *extra_args: str) -> None:
+        """Fit a chip at `addr`, optionally with model arguments such as
+        `--offset-uv 4000`. A fresh chip powers up at zero-scale."""
+        dac = self._vpcb_dir / "vpcb-dac7578"
+        self._ics[addr] = self._spawn_helper(
+            [str(dac), "--sock", self._sock, "--addr", addr, "-q", *extra_args])
+        self._ic_args[addr] = tuple(extra_args)
+        time.sleep(0.3)
+
+    def restore_ics(self) -> list:
+        """Back to exactly the configured chips at default settings, touching
+        only the ones that differ. Returns the addresses that were (re)fitted:
+        they power up at zero-scale, so the caller has to drive them again."""
+        for addr in list(self._ics):
+            if addr not in self._dacs or self._ic_args.get(addr):
+                self.kill_ic(addr)
+        refitted = [a for a in self._dacs if a not in self._ics]
+        for addr in refitted:
+            self.start_ic(addr)
+        return refitted
 
     # ---------------------------------------------------------------- console
 
