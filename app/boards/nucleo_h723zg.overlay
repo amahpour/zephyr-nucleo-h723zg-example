@@ -36,23 +36,50 @@
 };
 
 /*
- * Two DAC7578s on the Arduino R3 I2C header. i2c1 is `arduino_i2c` on this
- * board and the board DTS already enables it at 400 kHz on PB8 (D15, SCL) and
- * PB9 (D14, SDA), so only the child nodes are added here.
+ * DAC7578 breakout(s) on the Arduino R3 I2C header. i2c1 is `arduino_i2c` on
+ * this board and the board DTS already enables it on PB8 (D15, SCL) and PB9
+ * (D14, SDA), so only the bus speed and the child nodes are set here.
  *
- * Addresses are strapped, not programmed: ADDR1/ADDR0 both tied low give 0x48,
- * and ADDR1 floating with ADDR0 grounded gives 0x4c. Floating BOTH pins is
- * listed as not supported and answers at no address at all -- see the full
- * table in docs/hardware.md. That keeps the parts at the same two addresses
- * the virtual PCB models, so one firmware image drives either.
+ * One DAC by default: a single breakout exactly as it ships answers at 0x4c,
+ * so the rig needs no soldering. It drives board channels 0-7; channels 8-14
+ * are still sampled and read whatever their floating pins pick up.
+ *
+ * For two DACs and all 15 channels, build with
+ *     -- -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=2
+ * and strap the first board to 0x48 (address jumper to GND). Addresses are
+ * strapped, not programmed -- see the table in docs/hardware.md. That is the
+ * configuration the virtual PCB models by default.
  *
  * full-scale-mv is 3300 because full scale equals VREFIN (datasheet Equation 1:
  * VOUT = code / 2^n x VREFIN) and the rig ties VREFIN to the 3.3 V supply. If
  * your reference is something else, this number must change with it.
  */
+#ifndef APP_DAC_COUNT
+#define APP_DAC_COUNT 1
+#endif
+
 &i2c1 {
 	status = "okay";
 
+	/* 100 kHz, not the board default of 400. One breakout brings one set of
+	 * 10 kOhm pull-ups, and on jumper wires that only meets fast mode's
+	 * 300 ns rise time below roughly 35 pF. Standard mode allows 1000 ns.
+	 * A DAC write is three bytes against a 100 ms sample period, so the
+	 * slower bus costs nothing.
+	 */
+	clock-frequency = <100000>;
+
+#if APP_DAC_COUNT == 1
+	/* U1 - board channels 0-7, at the breakout's factory address */
+	dac_u1: dacx578@4c {
+		compatible = "ti,dacx578";
+		reg = <0x4c>;
+		#io-channel-cells = <1>;
+		resolution = <12>;
+		full-scale-mv = <3300>;
+		status = "okay";
+	};
+#else
 	/* U1 - board channels 0-7 */
 	dac_u1: dacx578@48 {
 		compatible = "ti,dacx578";
@@ -72,4 +99,5 @@
 		full-scale-mv = <3300>;
 		status = "okay";
 	};
+#endif
 };

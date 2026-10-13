@@ -1,0 +1,12 @@
+# Virtual PCB netlist:  <ic_i2c_addr> <ic_channel> <board_net>
+# One DAC7578 at its factory address drives ADC channels 0-7.
+# Nets 8-14 are still sampled by the MCU; nothing is wired to them.
+# Mirrors the single-breakout bench rig in docs/hardware.md.
+0x4c 0 0
+0x4c 1 1
+0x4c 2 2
+0x4c 3 3
+0x4c 4 4
+0x4c 5 5
+0x4c 6 6
+0x4c 7 7

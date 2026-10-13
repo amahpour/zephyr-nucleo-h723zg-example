@@ -118,9 +118,10 @@ minicom -D /dev/ttyACM0 -b 115200
 
 **Tip:** If you have multiple USB devices, identify ports by VID/PID using `lsusb` and `udevadm` (Linux) or `ioreg` (macOS). See [Hardware Setup](docs/hardware.md#identifying-device-ports-by-vidpid) for details.
 
-The hardware build is configured for 15 ADC channels and two DAC7578s on I²C1 by
-default. See [Hardware Setup](docs/hardware.md) for the DAC loopback test rig and
-its wiring.
+The hardware build samples 15 ADC channels and, by default, drives one DAC7578
+breakout on I²C1 — 8 channels, no soldering. A second breakout brings it to 15.
+See [Hardware Setup](docs/hardware.md) for the DAC loopback test rig and its
+wiring.
 
 ## Shell Commands
 
@@ -177,6 +178,10 @@ pytest test_adc.py --config=configs/vpcb.yaml -v
 
 # Physical hardware (Nucleo + DAC loopback rig):
 pytest test_adc.py --config=configs/physical.yaml -v
+
+# The virtual twin of the one-breakout bench rig (needs the one-DAC build,
+# see docs/hardware.md):
+pytest test_adc.py --config=configs/vpcb-one-dac.yaml -v
 
 # Fault matrix - 28 hardware faults injected into a running virtual PCB.
 # Virtual PCB only; skipped on every other config.

@@ -79,25 +79,43 @@ west flash --runner openocd
 
 ## Test Rig: DAC Loopback
 
-The board tests itself. Two DAC7578s on the Nucleo's own I²C bus drive voltages
-that are wired straight back into its ADC inputs. The firmware drives them with
+The board tests itself. A DAC7578 on the Nucleo's own I²C bus drives voltages
+that are wired straight back into its ADC inputs. The firmware drives it with
 the same `ti,dacx578` driver it runs against the virtual PCB, so the physical
-suite exercises the same code path as `configs/vpcb.yaml` — only the copper is
-real.
+suite exercises the same code path — only the copper is real.
 
-The wiring mirrors `vpcb/netlists/adc_loopback.txt` exactly, and the devicetree
-nodes are in `app/boards/nucleo_h723zg.overlay`.
+The rig comes in two sizes, chosen at build time:
+
+| | One breakout (default) | Two breakouts |
+|---|---|---|
+| Channels driven | 0–7 | 0–14 |
+| Soldering | **None** | One bridge, on U1's address jumper |
+| Addresses | `0x4c` | `0x48` and `0x4c` |
+| Firmware build | `west build -b nucleo_h723zg app` | add `-- -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=2` |
+| Test config | `configs/physical.yaml` as shipped | set `num_channels: 15` |
+| Virtual twin | `configs/vpcb-one-dac.yaml` | `configs/vpcb.yaml` |
+| Netlist it mirrors | `vpcb/netlists/adc_loopback_one_dac.txt` | `vpcb/netlists/adc_loopback.txt` |
+
+With one breakout the firmware still samples all 15 ADC channels. Channels 8–14
+have nothing wired to them, so their pins float and read whatever they pick up.
+On the virtual PCB those same channels show `---`, because the board model knows
+they are undriven and a real ADC cannot — see
+[walkthrough 2](../walkthroughs/02-fault-injection.md).
+
+The devicetree nodes are in `app/boards/nucleo_h723zg.overlay`.
 
 ### Equipment
 
 - **DUT:** NUCLEO-H723ZG
-- **DACs:** 2 × DAC7578 (8-channel, 12-bit, I²C) — U1 and U2
+- **DAC:** 1 × Adafruit DAC7578 breakout (8-channel, 12-bit, I²C), or 2 for all 15 channels
+- **Wires:** 12 jumpers for one breakout — power, ground, clock, data, and 8 outputs
 - **USB:** one cable to the Nucleo. No bench supply, no mux controller, no network instrument.
 
 ### I²C Bus
 
 I²C1 is the Arduino I²C (`arduino_i2c`) on this board. The board devicetree
-already enables it at 400 kHz, so nothing extra is needed in firmware.
+already enables it; the overlay runs it at 100 kHz for this rig (see pull-ups,
+below).
 
 | Signal | Nucleo pin | Arduino | Connector |
 |--------|------------|---------|-----------|
@@ -106,16 +124,23 @@ already enables it at 400 kHz, so nothing extra is needed in firmware.
 | GND | — | GND | CN7-8 |
 | VDD | — | 3V3 | Arduino power header (CN8) |
 
-**Pull-ups:** leave both breakouts' pull-ups fitted. The Adafruit board has
-10 kΩ on SDA and SCL; two in parallel make 5 kΩ, which is what a 400 kHz bus
-wants. The fast-mode limit is a 300 ns rise time, and 10 kΩ on its own only
-meets that below roughly 35 pF of bus capacitance — easy to exceed with jumper
-wires. An earlier version of this page said to remove one set; don't.
+**Pull-ups:** leave them fitted — add none, remove none. The Adafruit board
+has 10 kΩ on SDA and SCL. At 400 kHz the limit is a 300 ns rise time, which
+10 kΩ only meets below roughly 35 pF of bus capacitance — easy to exceed with
+jumper wires. So the overlay runs this bus at **100 kHz**, where the limit is
+1000 ns and one 10 kΩ set is comfortable. Two breakouts put 5 kΩ on the bus,
+which is fine at either speed. An earlier version of this page said to remove
+one set; don't.
 
 ### Addresses
 
 The address is strapped, not programmed. The pins are named **ADDR1/ADDR0** in
 the datasheet, and each is tied low, tied high, or left floating.
+
+With **one breakout** there is nothing to strap: it ships answering at `0x4c`,
+and the default firmware build expects exactly that.
+
+With **two**, they must differ:
 
 | Part | Address | ADDR1 | ADDR0 | Serves board channels |
 |------|---------|-------|-------|-----------------------|
@@ -175,18 +200,27 @@ use a different reference, change `full-scale-mv` in
 
 ### Adafruit Breakout: What to Change
 
+**One breakout: change nothing.** Leave the address jumper open and the `Vrf`
+jumper intact, exactly as it ships.
+
+Two breakouts:
+
 | Board | Address jumper | `Vrf` jumper | Result |
 |-------|----------------|--------------|--------|
 | U1 | Bridge centre pad to **GND** | Leave intact | `0x48`, 3.3 V full scale |
 | U2 | **Leave open** (the default) | Leave intact | `0x4c`, 3.3 V full scale |
 
-One solder bridge in total, on U1. Power both from 3V3, not 5 V: a 5 V supply
-would raise the reference to 5 V and drive the ADC inputs past their limit.
+Either way, power from 3V3, not 5 V: a 5 V supply would raise the reference to
+5 V and drive the ADC inputs past their limit.
 
 ### DAC-to-ADC Wiring
 
 Each DAC output goes to the same Nucleo pin the retired rig's mux output of the
-same number used, so an existing harness can be rewired output-for-output.
+same number used, so an existing harness can be rewired output-for-output. The
+breakout labels its outputs 0–7.
+
+**One breakout wires rows 0–7 only** — its outputs 0–7 to board channels 0–7.
+Rows 8–14 are for a second breakout.
 
 | Board ch | DAC output | Nucleo pin | ADC input | Connector |
 |----------|------------|------------|-----------|-----------|
@@ -215,9 +249,14 @@ same number used, so an existing harness can be rewired output-for-output.
 
 ```
 uart:~$ dacset 0 2000
-dacset ch0 -> dacx578@48 ch0 code=2481 OK
+dacset ch0 -> dacx578@4c ch0 code=2481 OK
 uart:~$ adcregs
+    ch[0]: 1998 mV
 ```
+
+That is the one-breakout build; with two, channel 0 is served by `dacx578@48`.
+Asking a one-breakout build for channel 8 or above is refused with
+`channel must be 0..7 - this board is built with 1 DAC`.
 
 A `-19` failure means nothing acknowledged the address: the part is absent,
 unpowered or mis-strapped.
@@ -379,6 +418,16 @@ cmake -S vpcb -B build-vpcb && cmake --build build-vpcb
 west build -b native_sim app -d build-vpcb-fw --pristine
 PYTHONPATH=tests/integration pytest tests/integration/ \
   --config=tests/integration/configs/vpcb.yaml -v
+```
+
+That is the two-DAC board. To run the twin of the one-breakout bench rig — same
+chip count, same address, same eight channels — before powering the real one:
+
+```bash
+west build -b native_sim app -d build-vpcb-fw-one-dac --pristine -- \
+  -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=1
+PYTHONPATH=tests/integration pytest tests/integration/ \
+  --config=tests/integration/configs/vpcb-one-dac.yaml -v
 ```
 
 ### QEMU Tests

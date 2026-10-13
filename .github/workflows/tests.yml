@@ -114,6 +114,23 @@ jobs:
           PYTHONPATH=tests/integration pytest tests/integration/ \
             --config=tests/integration/configs/vpcb.yaml -v
       
+      # The one-DAC board: the virtual twin of the single-breakout bench rig
+      # in configs/physical.yaml. Same chip count, address and channel count,
+      # so this is the closest CI gets to running the physical suite.
+      - name: Build native_sim firmware with one DAC
+        run: |
+          source ~/zephyrproject/.venv/bin/activate
+          export ZEPHYR_BASE=~/zephyrproject/zephyr
+          cd ${{ github.workspace }}
+          west build -b native_sim app -d build-vpcb-fw-one-dac --pristine -- \
+            -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=1
+
+      - name: Run integration tests (virtual PCB, one DAC)
+        run: |
+          cd ${{ github.workspace }}
+          PYTHONPATH=tests/integration pytest tests/integration/ \
+            --config=tests/integration/configs/vpcb-one-dac.yaml -v
+
       # ==================== FIRMWARE BUILD ====================
       - name: Build nucleo_h723zg firmware
         run: |

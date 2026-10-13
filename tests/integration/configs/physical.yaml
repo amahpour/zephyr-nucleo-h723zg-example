@@ -1,9 +1,14 @@
 # Physical test configuration: the DAC loopback rig
 #
-# The Nucleo drives two DAC7578s over its own I2C1, and their outputs are wired
-# straight back into its own ADC inputs. The same firmware and the same driver
-# run here as against the virtual PCB (configs/vpcb.yaml) -- only the copper is
-# real. Wiring is in docs/hardware.md.
+# The Nucleo drives a DAC7578 breakout over its own I2C1, and the DAC's outputs
+# are wired straight back into its own ADC inputs. The same firmware and the
+# same driver run here as against the virtual PCB -- only the copper is real.
+# Wiring is in docs/hardware.md.
+#
+# This describes the one-breakout rig, which needs no soldering: 8 channels.
+# Its virtual twin is configs/vpcb-one-dac.yaml; run that first. For two
+# breakouts and 15 channels, build with -DDTS_EXTRA_CPPFLAGS=-DAPP_DAC_COUNT=2
+# and set num_channels to 15.
 #
 # Build and flash first:
 #   west build -b nucleo_h723zg app --pristine
@@ -23,6 +28,6 @@ instrument:
   # Same instrument as the virtual PCB: voltages are set with `dacset` on the DUT.
   type: dac
 
-# 15 channels, matching CONFIG_APP_NUM_CH and both shipping board configs.
-# Two DAC7578s give 16; U2 channel 7 is unused.
-num_channels: 15
+# One 8-channel DAC. The firmware still samples all 15 ADC channels; the
+# other seven pins float and are not tested.
+num_channels: 8
