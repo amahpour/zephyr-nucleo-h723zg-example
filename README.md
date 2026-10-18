@@ -200,6 +200,9 @@ Follow-along tutorials with copy-pasteable commands and real captured output:
 - [Fault injection](walkthroughs/02-fault-injection.md) — cut a trace on a
   running board, pull and mis-strap chips, and check the firmware says which
   readings are real. Then run 28 hardware faults in about 23 seconds.
+- [Fix it layer by layer](walkthroughs/03-fix-it-layer-by-layer.md) — go back
+  to before the fix and apply it one commit at a time, with the file, the code
+  and the output at every step.
 
 ## More Documentation
 
