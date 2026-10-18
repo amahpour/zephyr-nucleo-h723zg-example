@@ -142,7 +142,7 @@ thrown away three separate times on the way up.
 
 ### Layer 1 — the board
 
-**`vpcb/board/main.c`** — lines 299–313
+**`vpcb/board/main.c`** — lines 299–310
 
 ```c
 case VPCB_MSG_NET_GET: {
@@ -173,13 +173,18 @@ if (st != VPCB_ST_OK) { return -ENODEV; }
 
 Every kind of failure becomes the same "no device" error.
 
-**`app/targets/vpcb/adc_backend.c`** — `vpcb_value_func`
+**`app/targets/vpcb/adc_backend.c`** — lines 47–58
 
 ```c
 ret = vpcb_net_read_mv(chan, &mv);
 if (ret != 0) {
-    /* Net unreadable - report 0 V but say so, loudly. */
-    ...
+    /* Net unreadable - report 0 V but say so, loudly. Once per change
+     * of state, not once per sample: a board that is down for a few
+     * seconds would otherwise print every channel ten times a second. */
+    if (chan < NUM_CH && !net_down[chan]) {
+        LOG_WRN("net %u unreadable (%d)", chan, ret);
+        net_down[chan] = true;
+    }
     *result = 0;
     return 0;
 }
@@ -243,7 +248,7 @@ VPCB_UNDRIVEN = 5, /* net exists but nothing drives it: floating */
 }
 ```
 
-**`vpcb/board/main.c`** — lines 142–154. A chip that leaves stops driving its
+**`vpcb/board/main.c`** — lines 145–154. A chip that leaves stops driving its
 wires:
 
 ```c
