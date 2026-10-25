@@ -9,6 +9,7 @@ Tests use abstract interfaces so they can run against:
 - Physical: Real hardware + DacInstrument (DACs on the board's own I2C bus)
 """
 
+import math
 import re
 import time
 
@@ -108,6 +109,37 @@ def wait_for_fresh_sample(dut, min_advance: int = 2, timeout: float = 5.0,
     )
 
 
+# The isolation test spreads its voltages across this range
+ISOLATION_LOW_MV = 300
+ISOLATION_HIGH_MV = 3000
+
+
+def isolation_levels(num_channels: int, rotation: int) -> dict[int, int]:
+    """
+    The voltage every channel holds during one round of the isolation test.
+
+    Each channel gets a different voltage, evenly spread from 300 mV to 3 V.
+    Neighbouring channels are several steps apart, so two channels shorted
+    together cannot both read their own value. Each round shifts the pattern
+    by one step: after num_channels rounds, every channel has held every
+    voltage once.
+
+    Args:
+        num_channels: Channels under test
+        rotation: Which round, 0 to num_channels - 1
+
+    Returns:
+        {channel: millivolts}
+    """
+    n = num_channels
+    step = (ISOLATION_HIGH_MV - ISOLATION_LOW_MV) / max(n - 1, 1)
+    levels = [ISOLATION_LOW_MV + round(i * step) for i in range(n)]
+
+    # The largest stride under n/2 that still visits every level once
+    stride = next(s for s in range(max(n // 2, 1), 0, -1) if math.gcd(s, n) == 1)
+    return {ch: levels[(ch * stride + rotation) % n] for ch in range(n)}
+
+
 class TestADC:
     """Generic ADC tests - work with any instrument/DUT combination."""
 
@@ -193,45 +225,35 @@ class TestADCVoltageRange:
 
 
 class TestADCIsolation:
-    """Test that ADC channels are properly isolated."""
+    """Every channel held at its own voltage, all at the same time."""
 
-    def test_channel_isolation(self, dut, instrument, driven_channel, num_test_channels):
-        """Test that driving one channel doesn't affect others."""
-        test_voltage = 2000  # mV
+    def test_channel_isolation(self, dut, instrument, rotation, num_test_channels):
+        """
+        Drive every channel to a different voltage at once and check each one
+        reads its own. A channel that reads near a neighbour's voltage is
+        shorted or crosstalking to it; one that reads off on its own is wrong.
+        """
+        expected = isolation_levels(num_test_channels, rotation)
 
-        # Reset all channels first, so earlier tests can't affect this one
-        if instrument.can_reset_channels:
-            for ch in range(num_test_channels):
-                instrument.set_voltage(ch, RESET_MV)
-            wait_for_fresh_sample(dut)  # Let the reset reach the registers
-
-        # Drive only the specified channel
-        instrument.enable_output(driven_channel, True)
-        instrument.set_voltage(driven_channel, test_voltage)
+        for ch, mv in expected.items():
+            instrument.enable_output(ch, True)
+            instrument.set_voltage(ch, mv)
         wait_for_fresh_sample(dut)
 
         response = dut.send_command("adcregs")
+        wrong = []
+        for ch, mv in expected.items():
+            actual = parse_channel_value(response, ch)
+            if abs(actual - mv) > PHYSICAL_TOLERANCE:
+                wrong.append(f"ch[{ch}]={actual}mV, expected ~{mv}mV")
 
-        # The driven channel should be at ~2V
-        driven_value = parse_channel_value(response, driven_channel)
-        assert abs(driven_value - test_voltage) <= PHYSICAL_TOLERANCE, (
-            f"Driven ch[{driven_channel}]={driven_value}mV, expected ~{test_voltage}mV"
+        # Leave every channel as we found it, so the next test starts clean
+        for ch in expected:
+            instrument.enable_output(ch, False)
+            if instrument.can_reset_channels:
+                instrument.set_voltage(ch, RESET_MV)
+
+        assert not wrong, (
+            f"rotation {rotation}: " + "; ".join(wrong)
+            + f" (tolerance={PHYSICAL_TOLERANCE})"
         )
-
-        # Other channels should NOT be at 2V (they're floating)
-        for ch in range(num_test_channels):
-            if ch != driven_channel:
-                other_value = parse_channel_value(response, ch)
-                # Floating channels should not read close to the driven voltage
-                # (allow wide range since floating, but not the driven voltage)
-                is_isolated = abs(other_value - test_voltage) > 300
-                if not is_isolated:
-                    pytest.fail(
-                        f"Channel isolation failed: ch[{ch}]={other_value}mV "
-                        f"while ch[{driven_channel}] driven at {test_voltage}mV"
-                    )
-
-        # Leave the channel as we found it, so the next test starts clean
-        instrument.enable_output(driven_channel, False)
-        if instrument.can_reset_channels:
-            instrument.set_voltage(driven_channel, RESET_MV)
