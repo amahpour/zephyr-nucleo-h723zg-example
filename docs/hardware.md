@@ -104,6 +104,15 @@ they are undriven and a real ADC cannot — see
 
 The devicetree nodes are in `app/boards/nucleo_h723zg.overlay`.
 
+### Hookup Diagram (One Breakout)
+
+![Adafruit DAC7578 breakout wired to the NUCLEO-H723ZG: outputs 0-5 to A0-A5 on CN9, outputs 6-7 to D13/D12 on CN7, VCC to 3V3 on CN8, GND/SCL/SDA to CN7](images/dac-loopback-one-breakout.svg)
+
+Twelve wires. The drawing is not to scale: match each wire by the pin labels on
+the boards. Connector and pin numbers are the Zio connector numbers from ST's
+user manual for this board, UM2407 Rev 4, Tables 18–20, and are listed in
+[DAC-to-ADC Wiring](#dac-to-adc-wiring) below.
+
 ### Equipment
 
 - **DUT:** NUCLEO-H723ZG
@@ -237,11 +246,20 @@ Rows 8–14 are for a second breakout.
 | 10 | U2 ch2 | PF4 | ADC3_INP9 | CN10-7 (A6) |
 | 11 | U2 ch3 | PF5 | ADC3_INP4 | CN10-9 (A7) |
 | 12 | U2 ch4 | PF6 | ADC3_INP8 | CN10-11 (A8) |
-| 13 | U2 ch5 | PA0 | ADC1_INP16 | CN10-27 (D32) |
-| 14 | U2 ch6 | PB0 | ADC1_INP9 | CN10-29 (D33) |
+| 13 | U2 ch5 | PA0 | ADC1_INP16 | CN10-29 (D32) |
+| 14 | U2 ch6 | PB0 | ADC1_INP9 | CN10-31 (D33) |
 | — | U2 ch7 | — | — | unused |
 
 **Important:** PC2 and PC3 are `PC2_C` and `PC3_C` pins that only connect to ADC3, not ADC1!
+
+**A4 and A5 on a modified board.** Two solder-bridge pairs decide what CN9 pins 9
+and 11 connect to. From the factory (UM2407 Table 14, default states in bold),
+SB53 and SB60 are on and SB55 and SB62 are off, so A4 and A5 are plain analog
+inputs (PC2, PF10). A board reworked for Arduino Uno shields has SB55/SB62 on,
+which joins A4 and A5 to PB9 and PB8 — the I²C bus this rig uses — and DAC
+outputs 4 and 5 would then drive the bus. On a second-hand board, check for
+continuity between CN9-9 and CN7-4, and between CN9-11 and CN7-2, before
+powering up.
 
 ### Driving It By Hand
 
@@ -284,17 +302,21 @@ the ADC pin assignments in `app/boards/nucleo_h723zg.overlay`.
 
 ## NUCLEO-H723ZG Connector Pinout Reference
 
-### CN9 - Arduino Analog Header
+From ST's UM2407 (Rev 4), Tables 18–21. CN7, CN8, CN9 and CN10 are the **Zio**
+connectors (Arduino Uno V3 plus extensions); the ST morpho connectors are CN11
+and CN12. Odd pins are one row of each header and even pins the other.
+
+### CN9 - Zio, Arduino Analog Header
 | Pin | MCU Pin | Function |
 |-----|---------|----------|
 | 1 | PA3 | A0 / ADC1_INP15 |
 | 3 | PC0 | A1 / ADC1_INP10 |
 | 5 | PC3 | A2 / ADC1_INP13 |
 | 7 | PB1 | A3 / ADC1_INP5 |
-| - | PC2 | A4 / ADC1_INP12 |
-| - | PF10 | A5 / ADC3_INP6 |
+| 9 | PC2 | A4 / ADC1_INP12 |
+| 11 | PF10 | A5 / ADC3_INP6 |
 
-### CN7 - Morpho Left (ADC pins only)
+### CN7 - Zio (ADC pins only)
 | Pin | MCU Pin | Function |
 |-----|---------|----------|
 | 10 | PA5 | D13 / ADC1_INP19 |
@@ -302,14 +324,16 @@ the ADC pin assignments in `app/boards/nucleo_h723zg.overlay`.
 | 17 | PA4 | D24 / ADC1_INP18 |
 | 20 | PF3 | D8 / ADC3_INP5 |
 
-### CN10 - Morpho Right (ADC pins only)
+### CN10 - Zio (ADC pins only)
 | Pin | MCU Pin | Function |
 |-----|---------|----------|
 | 7 | PF4 | A6 / ADC3_INP9 |
 | 9 | PF5 | A7 / ADC3_INP4 |
 | 11 | PF6 | A8 / ADC3_INP8 |
-| 27 | PA0 | D32 / ADC1_INP16 |
-| 29 | PB0 | D33 / ADC1_INP9 |
+| 29 | PA0 | D32 / ADC1_INP16 |
+| 31 | PB0 | D33 / ADC1_INP9 |
+
+CN10 pin 27 is GND. An earlier version of this page put D32 there, one row off.
 
 ## Connecting via Serial
 
@@ -489,8 +513,8 @@ Rigol DP832 CH3 ──────► CD74HC4067 Common (SIG)
 | C10 | PF4 | ADC3_INP9 | CN10-7 (A6) | Brown/White |
 | C11 | PF5 | ADC3_INP4 | CN10-9 (A7) | Red/White |
 | C12 | PF6 | ADC3_INP8 | CN10-11 (A8) | Orange/White |
-| C13 | PA0 | ADC1_INP16 | CN10-27 (D32) | Yellow/White |
-| C14 | PB0 | ADC1_INP9 | CN10-29 (D33) | Green/White |
+| C13 | PA0 | ADC1_INP16 | CN10-29 (D32) | Yellow/White |
+| C14 | PB0 | ADC1_INP9 | CN10-31 (D33) | Green/White |
 
 **Note:** Mux outputs C0-C15 match software channels 0-15. We use C0-C14 (15 channels).
 
