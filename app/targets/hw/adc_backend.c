@@ -122,7 +122,13 @@ int adc_backend_init(void)
         channel_cfgs[i] = (struct adc_channel_cfg){
             .gain = ADC_GAIN_1,
             .reference = ADC_REF_INTERNAL,  /* STM32 uses VREF+ pin (3.3V) */
-            .acquisition_time = ADC_ACQ_TIME_DEFAULT,  /* Use driver default */
+            /*
+             * Sample for as long as the ADC allows. The driver default is the
+             * shortest window, too short for the sampling capacitor to charge
+             * through the pin: A4 read 214 mV low at 3.2 V. We convert every
+             * 100 ms, so there is no reason to hurry.
+             */
+            .acquisition_time = ADC_ACQ_TIME_MAX,
             .channel_id = channel_mappings[i].channel_id,
             .differential = 0,  /* Single-ended mode */
         };
