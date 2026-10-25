@@ -17,9 +17,16 @@ from pathlib import Path
 from sweep_plot import worst_errors, write_sweep
 
 
-# Tolerance for physical hardware tests (in mV)
-# ~100mV accounts for mux on-resistance (~70Ω) and ADC quantization
-PHYSICAL_TOLERANCE = 150
+# How far a reading may sit from the voltage the DAC was set to, in mV.
+#
+# A DAC7578 at its datasheet limits is off by up to ~13 mV (offset, gain,
+# quantisation - see DATASHEET_TOL_MV in test_faults.py). On the bench, every
+# channel reads within 12 mV across the whole range, except A5, which carries
+# about 30 mV of noise around a correct mean. 50 covers both, and still fails
+# the ADC sampling-time bug, which read 214 mV low.
+#
+# It was 150, for a bench supply behind an analog mux that is no longer here.
+PHYSICAL_TOLERANCE = 50
 
 # The sweep steps every channel together across nearly the whole 3.3 V range
 SWEEP_MV = range(50, 3251, 25)
