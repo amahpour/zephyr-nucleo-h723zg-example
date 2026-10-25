@@ -109,7 +109,8 @@ The devicetree nodes are in `app/boards/nucleo_h723zg.overlay`.
 ![Adafruit DAC7578 breakout wired to the NUCLEO-H723ZG: outputs 0-5 to A0-A5 on CN9, outputs 6-7 to D13/D12 on CN7, VCC to 3V3 on CN8, GND/SCL/SDA to CN7](images/dac-loopback-one-breakout.svg)
 
 Twelve wires. The drawing is not to scale: match each wire by the pin labels on
-the boards. Connector and pin numbers are the Zio connector numbers from ST's
+the boards. Leave `VRf`, the `GND` at the end of the output row, `LDAC` and
+`CLR` unconnected — `VRf` is already tied to VCC on the breakout. Connector and pin numbers are the Zio connector numbers from ST's
 user manual for this board, UM2407 Rev 4, Tables 18–20, and are listed in
 [DAC-to-ADC Wiring](#dac-to-adc-wiring) below.
 
