@@ -12,13 +12,20 @@ Tests use abstract interfaces so they can run against:
 import math
 import re
 import time
+from pathlib import Path
 
-import pytest
+from sweep_plot import worst_errors, write_sweep
 
 
 # Tolerance for physical hardware tests (in mV)
 # ~100mV accounts for mux on-resistance (~70Ω) and ADC quantization
 PHYSICAL_TOLERANCE = 150
+
+# The sweep steps every channel together across nearly the whole 3.3 V range
+SWEEP_MV = range(50, 3251, 25)
+
+# Where the sweep writes its readings and plot. Not tracked by git.
+RESULTS_DIR = Path(__file__).parent / "results"
 
 # Voltage channels are driven back to between tests, where the instrument
 # can do that cheaply (see InstrumentBase.can_reset_channels)
@@ -200,28 +207,50 @@ class TestADCSingleChannel:
 
 
 class TestADCVoltageRange:
-    """Test ADC voltage range on channel 0."""
+    """Every channel, across the whole range."""
 
-    @pytest.mark.parametrize("test_voltage", [500, 1000, 1500, 2000, 2500, 3000])
-    def test_voltage_sweep(self, dut, instrument, test_voltage):
-        """Test various voltages on channel 0."""
-        channel = 0
+    def test_voltage_sweep(self, dut, instrument, num_test_channels, request):
+        """
+        Step every channel together from 50 mV to 3.25 V, 25 mV at a time, and
+        check every reading.
 
-        instrument.enable_output(channel, True)
-        instrument.set_voltage(channel, test_voltage)
-        wait_for_fresh_sample(dut)
+        The readings are written to results/ as CSV, with their errors as an
+        SVG plot: a pass or fail says whether there is a problem, the plot shows
+        its shape.
+        """
+        channels = range(num_test_channels)
+        rows = []
+        for set_mv in SWEEP_MV:
+            for ch in channels:
+                instrument.enable_output(ch, True)
+                instrument.set_voltage(ch, set_mv)
+            wait_for_fresh_sample(dut)
+            response = dut.send_command("adcregs")
+            rows.append((set_mv, {ch: parse_channel_value(response, ch) for ch in channels}))
 
-        response = dut.send_command("adcregs")
-        actual_voltage = parse_channel_value(response, channel)
+        # Leave every channel as we found it, so the next test starts clean
+        for ch in channels:
+            instrument.enable_output(ch, False)
+            if instrument.can_reset_channels:
+                instrument.set_voltage(ch, RESET_MV)
 
-        assert abs(actual_voltage - test_voltage) <= PHYSICAL_TOLERANCE, (
-            f"ch[{channel}]={actual_voltage}mV, expected ~{test_voltage}mV"
+        config = Path(request.config.getoption("--config")).stem
+        csv_path, svg_path = write_sweep(
+            rows, RESULTS_DIR / f"voltage_sweep-{config}", PHYSICAL_TOLERANCE, config)
+
+        worst = worst_errors(rows)
+        print(f"\nWorst error per channel over {len(rows)} steps "
+              f"(tolerance {PHYSICAL_TOLERANCE} mV):")
+        for ch, (set_mv, err) in worst.items():
+            print(f"  ch[{ch:2}] {err:+5d} mV at {set_mv} mV")
+        print(f"Plot: {svg_path}")
+
+        bad = [f"ch[{ch}] {err:+d} mV at {set_mv} mV"
+               for ch, (set_mv, err) in worst.items() if abs(err) > PHYSICAL_TOLERANCE]
+        assert not bad, (
+            f"out of tolerance ({PHYSICAL_TOLERANCE} mV): " + "; ".join(bad)
+            + f". Plot: {svg_path}"
         )
-
-        # Leave the channel as we found it, so the next test starts clean
-        instrument.enable_output(channel, False)
-        if instrument.can_reset_channels:
-            instrument.set_voltage(channel, RESET_MV)
 
 
 class TestADCIsolation:
