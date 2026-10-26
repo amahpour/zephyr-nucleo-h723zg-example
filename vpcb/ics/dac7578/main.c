@@ -113,7 +113,14 @@ static uint16_t handle_write(int fd, const uint8_t *w, uint16_t wlen)
 	uint8_t access = ca & 0x0F;
 	uint16_t data  = 0;
 
-	if (wlen >= 3) { data = ((uint16_t)w[1] << 8) | w[2]; }
+	/* A command byte on its own only selects a register to read back. The
+	 * real part acts on a command at the acknowledge after its second data
+	 * byte (datasheet, MSDB and LSDB), so a short write changes nothing. */
+	if (wlen < 3) {
+		logd("SELECT ca=0x%02X for read-back", ca);
+		return VPCB_OK;
+	}
+	data = ((uint16_t)w[1] << 8) | w[2];
 	uint16_t code = data >> (16 - resolution);   /* left-justified */
 
 	logd("XFER ca=0x%02X (cmd=0x%X access=0x%X) data=0x%04X code=%u",
