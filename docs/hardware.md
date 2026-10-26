@@ -277,8 +277,11 @@ That is the one-breakout build; with two, channel 0 is served by `dacx578@48`.
 Asking a one-breakout build for channel 8 or above is refused with
 `channel must be 0..7 - this board is built with 1 DAC`.
 
-A `-19` failure means nothing acknowledged the address: the part is absent,
-unpowered or mis-strapped.
+A `-5` failure means nothing answered on the bus: the part is absent,
+unpowered or mis-strapped, or SDA or SCL is off. The STM32 driver reports every
+I²C failure as `-5`, so the code alone can't say which; check the wiring first.
+(The virtual board once said `-19` here. See
+[the root-cause write-up](rca/i2c-nack-error-code.md).)
 
 ### What the Loopback Can't Tell You
 

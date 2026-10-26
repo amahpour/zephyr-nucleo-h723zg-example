@@ -496,7 +496,7 @@ section[id] { scroll-margin-top: 64px; }
   <div class="fact"><dt>Build systems</dt><dd>2</dd></div>
   <div class="fact"><dt>Shared header</dt><dd>1</dd></div>
   <div class="fact"><dt>Round trip</dt><dd>1998 mV</dd></div>
-  <div class="fact"><dt>Chip absent</dt><dd>−19 ENODEV</dd></div>
+  <div class="fact"><dt>Chip absent</dt><dd>−5 EIO</dd></div>
 </dl>
 
 <section id="glance">
@@ -562,7 +562,7 @@ section[id] { scroll-margin-top: 64px; }
 
   <div class="col">
     <div class="note"><p>The only thing shared across the boundary is <code>vpcb/include/vpcb/proto.h</code>, which compiles into both sides and is allowed to include nothing but <code>&lt;stdint.h&gt;</code>. If that header ever needs a Zephyr header or a host header, the process boundary has leaked.</p></div>
-    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-19</code> with no rebuild and no mock. A net is whatever is wired to it right now: the board works each one out from the netlist on demand, so once a chip is gone its nets float, and the firmware reports <code>---</code> rather than a voltage nobody is driving.</p>
+    <p>Two consequences fall straight out of the picture. Killing a chip process makes its address stop acknowledging — the driver gets <code>-5</code>, exactly what the real STM32 driver returns, with no rebuild and no mock. A net is whatever is wired to it right now: the board works each one out from the netlist on demand, so once a chip is gone its nets float, and the firmware reports <code>---</code> rather than a voltage nobody is driving.</p>
   </div>
 </section>
 
@@ -742,7 +742,7 @@ section[id] { scroll-margin-top: 64px; }
 
   <figure>
     <div class="figbody">
-      <svg viewBox="0 0 980 300" role="img" aria-label="Side-by-side comparison: with the DAC process running the write is acknowledged and the ADC reads 1998 millivolts; with the DAC process absent the board answers NAK and the firmware returns error 19, ENODEV, while the ADC still reads zero.">
+      <svg viewBox="0 0 980 300" role="img" aria-label="Side-by-side comparison: with the DAC process running the write is acknowledged and the ADC reads 1998 millivolts; with the DAC process absent the board answers NAK and the firmware returns error 5, EIO, while the ADC still reads zero.">
         <defs>
           <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="var(--copper)"/>
@@ -803,9 +803,9 @@ section[id] { scroll-margin-top: 64px; }
         <text x="700" y="134" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="var(--oxide)">NAK — nothing answered</text>
 
         <rect x="536" y="180" width="434" height="46" fill="var(--oxide-soft)" stroke="var(--oxide)" stroke-width="1"/>
-        <text x="554" y="209" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--oxide)">I²C write FAILED (−19) — did not ACK</text>
+        <text x="554" y="209" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--oxide)">I²C write FAILED (−5) — no answer</text>
 
-        <text x="536" y="256" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">−19 is −ENODEV, produced by a real NAK crossing a</text>
+        <text x="536" y="256" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">−5 is −EIO, produced by a real NAK crossing a</text>
         <text x="536" y="274" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">real process boundary. ch[0] reads ---, not 0 mV.</text>
       </svg>
     </div>
@@ -828,7 +828,7 @@ dacset ch0 -> dacx578@48 ch0 code=2481 OK
 <span class="c">── chip absent ───────────────────────────────</span>
 <span class="p">uart:~$</span> <span class="o">dacset 0 2000</span>
 <span class="e">E: addr 0x48 NAK - no device on the virtual bus</span>
-<span class="e">dacset ch0: write to dacx578@48 FAILED (-19) - device did not ACK</span>
+<span class="e">dacset ch0: write to dacx578@48 FAILED (-5) - nothing answered on the bus</span>
 <span class="p">uart:~$</span> <span class="o">adcregs</span>
     ch[0]: <span class="hl">---</span></div>
 
@@ -1030,6 +1030,9 @@ dacset ch3 -> dacx578@48 ch3 code=1861 OK
 
   <div class="col">
     <p>Every round of the isolation test failed on channel 5, and only channel 5. In one round the floating pin happened to read 224&nbsp;mV against a 300&nbsp;mV setpoint &mdash; the old 150&nbsp;mV tolerance would have passed it. <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/walkthroughs/04-real-hardware.md">walkthroughs/04-real-hardware.md</a> replays all of it on your own bench, one commit at a time.</p>
+
+    <h3>The bench corrects the twin</h3>
+    <p>Pull the DAC&rsquo;s SDA wire and every write fails with <code>-5</code>. The virtual board had always said <code>-19</code> for a chip that doesn&rsquo;t answer &mdash; a code chosen before there was hardware to check it against. The real STM32 driver reports every I&sup2;C failure as <code>-5</code>, so the virtual board now does too, and keeps its more detailed log line. Where the two boards disagree, the hardware is right. The <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/docs/rca/i2c-nack-error-code.md">root-cause write-up</a> has the history.</p>
   </div>
 </section>
 
@@ -1109,7 +1112,7 @@ west build -b native_sim app -d build-vpcb-fw
       <tbody>
         <tr><td>Chip present — ch[0]</td><td class="num">1998 mV</td><td><span class="pill ok">PASS</span> target 2000, 1 LSB ≈ 0.806 mV</td></tr>
         <tr><td>Chip present — ch[3]</td><td class="num">998 mV</td><td><span class="pill ok">PASS</span> target 1000</td></tr>
-        <tr><td>Chip absent — write</td><td class="num">−19</td><td><span class="pill nak">NAK</span> −ENODEV, error path ran</td></tr>
+        <tr><td>Chip absent — write</td><td class="num">−5</td><td><span class="pill nak">NAK</span> −EIO, as on the real board; error path ran</td></tr>
         <tr><td>Chip absent — ch[0]</td><td class="num">---</td><td><span class="pill ok">PASS</span> no reading, rather than a made-up 0 mV</td></tr>
         <tr><td>Unit tests (twister)</td><td class="num">4 / 4</td><td><span class="pill ok">PASS</span> no regression</td></tr>
         <tr><td>Integration (QEMU)</td><td class="num">38 / 38</td><td><span class="pill ok">PASS</span> 76.68 s</td></tr>

@@ -8,7 +8,8 @@ were. They pass. Then replace them, one commit at a time, with tests the old
 bench rig could never have run. They pass too — but one of them draws a plot,
 and the plot shows a bug that every pass/fail check waved through. The fix is
 one line. Then cut a real wire, and answer the question
-[Walkthrough 2](02-fault-injection.md) left open.
+[Walkthrough 2](02-fault-injection.md) left open. Last, pull a bus wire, and
+watch the real board correct the virtual one.
 
 Every file path, line number and code snippet below is taken from the actual
 commits, and every block of output was captured on a real NUCLEO-H723ZG.
@@ -527,6 +528,59 @@ Plug A5 back in.
 
 ---
 
+## Step 10 — Pull SDA
+
+Walkthrough 1's other fault was a chip that stops answering. On the bench,
+pull the DAC's **SDA** wire at the Nucleo end (D14, CN7 pin 4) with channel 0
+holding 2000 mV, then try to change it:
+
+```
+dacset 0 500
+```
+
+```
+dacset ch0: write to dacx578@4c FAILED (-5)
+```
+
+```
+adcregs
+```
+
+```
+    ch[0]: 1997 mV
+    ch[1]: 0 mV
+```
+
+Two things to notice.
+
+**The reading doesn't change, and that's correct.** The DAC is still powered
+and still driving the last value it was given, so channel 0 really is at
+2000 mV. Only the write path is broken. That's why there is no `---`: on a real
+board, `---` means the ADC itself couldn't read, and it could.
+
+**The error code is wrong — on the virtual board.** For a chip that doesn't
+answer, the virtual board always said `-19`. The real board says `-5`. The
+real STM32 I²C driver reports every bus failure as `-5`: no acknowledge, lost
+bus, timeout, all the same. The virtual board's `-19` was chosen before there
+was any hardware to check it against, and it was never checked.
+[The root-cause write-up](../docs/rca/i2c-nack-error-code.md) has the history.
+
+The fix went into the virtual board, not the firmware. It now returns `-5` like
+the real driver, and keeps its more detailed log line:
+
+```
+E: addr 0x48 NAK - no device on the virtual bus
+dacset ch0: write to dacx578@48 FAILED (-5) - nothing answered on the bus
+```
+
+That's the loop this whole series runs on. Build and test on the virtual board.
+Run the same tests on the real one. Where they disagree, the hardware is right
+and the virtual board gets fixed. `-19` would still be wrong without a bench.
+
+Plug SDA back in.
+
+---
+
 ## Cleanup
 
 ```bash
@@ -552,6 +606,10 @@ fail the old firmware nine times.
 **You can't read a cut wire. You can test for one.** A floating pin reads a
 number, not `---`. Drive it to a few very different voltages and it gives itself
 away by not following.
+
+**The bench corrects the virtual board, too.** The virtual board said `-19` for
+a chip that doesn't answer; the real driver says `-5`. Hardware wins, and the
+virtual board gets fixed.
 
 **The virtual board was right about everything it models.** Wiring, chips,
 addresses, drivers, error paths — all of it carried over. What it doesn't model

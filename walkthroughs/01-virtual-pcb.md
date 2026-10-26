@@ -261,12 +261,14 @@ dacset 0 2000
 ```
 [board 597985565.896] I2C addr=0x48 wlen=3 rlen=0 -> NAK (no IC at this address)
 E: addr 0x48 NAK - no device on the virtual bus
-dacset ch0: write to dacx578@48 FAILED (-19) - device did not ACK
+dacset ch0: write to dacx578@48 FAILED (-5) - nothing answered on the bus
 ```
 
-`-19` is `-ENODEV`, and it arrived by the honest route: the driver issued a real
-transfer, nothing acknowledged the address, and the error propagated up through
-the Zephyr I²C API. There was no rebuild, no `--inject-failure` flag, no mock
+`-5` is `-EIO`, the same code the real STM32 I²C driver returns when nothing
+answers — and it arrived by the honest route: the driver issued a real transfer,
+nothing acknowledged the address, and the error propagated up through the Zephyr
+I²C API. (It used to say `-19`, until the real board disagreed: see
+[the root-cause write-up](../docs/rca/i2c-nack-error-code.md).) There was no rebuild, no `--inject-failure` flag, no mock
 object and no `#ifdef`. A process stopped existing.
 
 On the bench this is an unpopulated footprint, a cold solder joint, a part held
@@ -421,9 +423,11 @@ with a config option is a chip that's still there. A missing chip that's a
 process you killed produces a NAK because there is genuinely nothing on the
 other end of the socket.
 
-**A broken harness must not look like a broken device.** `-19` means the part
-didn't answer. `-5` means the simulator didn't. Collapsing those into one error
-code costs somebody a day.
+**A broken harness must not look like a broken device — but it must return
+what the hardware returns.** On a real board every I²C failure is `-5`, so it is
+here too. What tells them apart is the `E:` line before it: `NAK - no device on
+the virtual bus` means the part didn't answer; `no reply from the virtual PCB`
+means the simulator didn't.
 
 ## Where to go next
 

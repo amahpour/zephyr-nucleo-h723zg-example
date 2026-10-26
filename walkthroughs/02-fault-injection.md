@@ -150,9 +150,7 @@ instead of the `0 mV` it would once have printed, which looked exactly like a
 channel genuinely sitting at zero volts.
 
 `-61` is `-ENODATA`: the net exists, but nothing is driving it. It's a different
-fault from the `-19` you met in Walkthrough 1 (nothing answered on the bus) and
-the `-5` (the simulator itself stopped answering). Three different failures,
-three different answers.
+fault from the `-5` you met in Walkthrough 1, where nothing answered on the bus.
 
 ## Step 5 — Restore the trace
 
@@ -273,7 +271,7 @@ dacset 8 1500
 
 ```
 E: addr 0x4c NAK - no device on the virtual bus
-dacset ch8: write to dacx578@4c FAILED (-19) - device did not ACK
+dacset ch8: write to dacx578@4c FAILED (-5) - nothing answered on the bus
 ```
 
 ```
@@ -290,7 +288,7 @@ adcregs
 This is the one case in this walkthrough where a confident `0 mV` is **the
 truth**. The chip is fitted, powered and driving its pins at zero-scale. It's
 just answering at an address nobody is talking to. A real board behaves exactly
-the same way: `-19` on the write, 0 V on the pins.
+the same way: `-5` on the write, 0 V on the pins.
 
 Put everything back before moving on:
 
@@ -331,7 +329,7 @@ test_faults.py::TestFaultMatrix::test_intermittent_trace PASSED
 |---:|---|---|
 | 15 | One trace cut, on each channel | **No** — `twin-only` |
 | 3 | Two wires crossed (one pair crosses between chips) | **Yes** — by driving distinct values |
-| 2 | A chip pulled | **Partly** — the `-19` yes, the `---` no |
+| 2 | A chip pulled | **Partly** — the `-5` yes, the `---` no |
 | 2 | A chip strapped to the wrong address | **Yes**, identically |
 | 4 | A DAC at each of its datasheet offset and gain limits | **Yes** — real parts land in here |
 | 2 | A chip dropping out; a trace opening and closing | **Partly** / no |
@@ -362,7 +360,7 @@ information doesn't exist there.
 
 So here's what carries over to hardware, and what doesn't:
 
-- **Carries over:** `-19` on a missing or mis-strapped chip, crossed wires caught
+- **Carries over:** `-5` on a missing or mis-strapped chip, crossed wires caught
   by distinct values, datasheet error inside your tolerances, and every layer of
   the firmware passing along "not a real reading" when a read genuinely fails.
 - **Twin-only:** knowing a net is floating. On the bench you'd need extra
