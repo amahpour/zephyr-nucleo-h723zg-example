@@ -1016,7 +1016,20 @@ dacset ch3 -> dacx578@48 ch3 code=1861 OK
   <div class="col">
     <p>The firmware converts each channel once every 100&nbsp;ms, so the longest window costs nothing. A scope probe clipped to A4 made the error smaller, too: the ADC borrowed charge from the probe&rsquo;s capacitance. The instrument you&rsquo;d use to check the reading changed it.</p>
     <div class="note"><p><b>Why the twin passed.</b> The virtual board models what a circuit does &mdash; which pin connects to which, and what each chip drives &mdash; not how long anything takes. The fix lives in a file only the real board builds, so the virtual results could not change, and did not need to.</p></div>
-    <p>The tolerance went from 150&nbsp;mV, sized for an analog switch the rig no longer has, to 50&nbsp;mV, sized from the DAC&rsquo;s datasheet and what the bench measured. At 50&nbsp;mV the same tests fail the old firmware nine times. <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/walkthroughs/04-real-hardware.md">walkthroughs/04-real-hardware.md</a> replays it on your own bench, one commit at a time.</p>
+    <p>The tolerance went from 150&nbsp;mV, sized for an analog switch the rig no longer has, to 50&nbsp;mV, sized from the DAC&rsquo;s datasheet and what the bench measured. At 50&nbsp;mV the same tests fail the old firmware nine times.</p>
+
+    <h3>A real cut wire</h3>
+    <p>On the virtual board a cut trace reads <code>---</code>, because the board knows nothing drives the net. Pull A5&rsquo;s jumper on the bench and the ADC reads a number instead &mdash; a floating pin converts to whatever charge is sitting on it. The needle can&rsquo;t tell. But it can be tested: change what the DAC sends, and a cut input doesn&rsquo;t follow.</p>
+  </div>
+
+  <div class="term"><span class="c">── A5 unplugged at the Nucleo; channels 4, 5 and 6 all set to 2800 mV ──</span>
+<span class="p">uart:~$</span> <span class="o">adcregs</span>
+    ch[4]: 2802 mV
+    ch[5]: <span class="hl">281 mV</span>
+    ch[6]: 2797 mV</div>
+
+  <div class="col">
+    <p>Every round of the isolation test failed on channel 5, and only channel 5. In one round the floating pin happened to read 224&nbsp;mV against a 300&nbsp;mV setpoint &mdash; the old 150&nbsp;mV tolerance would have passed it. <a href="https://github.com/amahpour/zephyr-nucleo-h723zg-example/blob/main/walkthroughs/04-real-hardware.md">walkthroughs/04-real-hardware.md</a> replays all of it on your own bench, one commit at a time.</p>
   </div>
 </section>
 

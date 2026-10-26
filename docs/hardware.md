@@ -303,6 +303,13 @@ sagged the same way, and the ADC1 inputs read high. The fix is one line in
 `app/targets/hw/adc_backend.c`, a file the virtual board never builds.
 [Walkthrough 4](../walkthroughs/04-real-hardware.md) finds and fixes it.
 
+It goes the other way too. On the virtual board a cut wire reads `---`, because
+the board knows the net is undriven. On the bench, a cut wire leaves the pin
+floating and the ADC reads whatever charge is on it — with A5 unplugged, 95 mV
+when the DAC was at 0 and 281 mV when it was at 2.8 V. The loopback still
+catches it, because a cut input doesn't follow its DAC: every round of
+`test_channel_isolation` failed on channel 5, and only on channel 5.
+
 ## ADC Channel Mapping
 
 15 channels are configured by default in `app/boards/nucleo_h723zg.conf`, with

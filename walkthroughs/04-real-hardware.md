@@ -7,7 +7,8 @@ Go back to the moment before the first bench run and run the tests as they
 were. They pass. Then replace them, one commit at a time, with tests the old
 bench rig could never have run. They pass too — but one of them draws a plot,
 and the plot shows a bug that every pass/fail check waved through. The fix is
-one line.
+one line. Then cut a real wire, and answer the question
+[Walkthrough 2](02-fault-injection.md) left open.
 
 Every file path, line number and code snippet below is taken from the actual
 commits, and every block of output was captured on a real NUCLEO-H723ZG.
@@ -443,6 +444,89 @@ Same test names as Step 3. Completely different questions.
 
 ---
 
+## Step 9 — Cut a wire
+
+On the virtual board, a cut wire reads `---`, because the board knows nothing
+is driving the pin. [Walkthrough 2](02-fault-injection.md#step-10--what-the-twin-cant-promise)
+admitted real copper can't know that, and guessed the bench would need "a test
+that checks a channel moves when you expect it to." Here's that test.
+
+Cut a wire for real: pull the jumper from **A5** at the Nucleo end (CN9 pin 11)
+and leave the DAC end plugged in. Then drive channels 4, 5 and 6 together:
+
+```
+dacset 4 0
+dacset 5 0
+dacset 6 0
+adcregs
+```
+
+```
+    ch[4]: 3 mV
+    ch[5]: 95 mV
+    ch[6]: 4 mV
+```
+
+**The needle can't tell.** Channel 5 shows a number, not `---`. A real ADC
+converts a floating pin to whatever charge happens to be sitting on it, and
+nothing in the reading says it's meaningless. That part of the virtual board's
+fix doesn't carry over to copper.
+
+**But you can add fuel and watch the needle.** Drive all three to 500 mV, then
+to 2800 mV:
+
+```
+    ch[4]: 509 mV
+    ch[5]: 101 mV
+    ch[6]: 501 mV
+```
+
+```
+    ch[4]: 2802 mV
+    ch[5]: 281 mV
+    ch[6]: 2797 mV
+```
+
+Channels 4 and 6 follow. Channel 5 creeps up a little when its neighbours are
+high, but nowhere near 2.8 V. A connected input follows the DAC; a cut one
+doesn't. That's exactly what the isolation test and the sweep check, on every
+channel:
+
+```bash
+PYTHONPATH=tests/integration pytest tests/integration/test_adc.py --config=tests/integration/configs/physical.yaml -v -s -k "isolation or sweep"
+```
+
+```
+E       AssertionError: rotation 0: ch[5]=170mV, expected ~3000mV (tolerance=50)
+E       AssertionError: rotation 1: ch[5]=224mV, expected ~300mV (tolerance=50)
+E       AssertionError: rotation 2: ch[5]=270mV, expected ~686mV (tolerance=50)
+E       AssertionError: rotation 3: ch[5]=294mV, expected ~1071mV (tolerance=50)
+E       AssertionError: rotation 4: ch[5]=141mV, expected ~1457mV (tolerance=50)
+E       AssertionError: rotation 5: ch[5]=161mV, expected ~1843mV (tolerance=50)
+E       AssertionError: rotation 6: ch[5]=133mV, expected ~2229mV (tolerance=50)
+E       AssertionError: rotation 7: ch[5]=169mV, expected ~2614mV (tolerance=50)
+...
+================= 9 failed, 10 deselected in 101.97s (0:01:41) =================
+```
+
+Every round fails, and every failure names channel 5 and only channel 5. The
+sweep shows it at a glance — one line falls away while the other seven sit on
+zero:
+
+![Sweep with A5 unplugged: channel 5 stays near 0 V while the DAC climbs](images/04-sweep-cut-wire.svg)
+
+Look at rotation 1. Channel 5 should hold 300 mV, and the floating pin happened
+to read 224. The old 150 mV tolerance would have passed that round. One reading
+can match by luck; eight different voltages can't.
+
+That's the answer. On real hardware you can't tell a cut wire
+from a single reading. You can tell by changing what you send and checking the
+reading follows — and the tests now do that on every channel, every run.
+
+Plug A5 back in.
+
+---
+
 ## Cleanup
 
 ```bash
@@ -464,6 +548,10 @@ time anyone looked at it.
 **A loose tolerance hides bugs.** 150 mV covered a switch that was gone, and a
 bug that was there. Tightened to what the bench can really do, the same tests
 fail the old firmware nine times.
+
+**You can't read a cut wire. You can test for one.** A floating pin reads a
+number, not `---`. Drive it to a few very different voltages and it gives itself
+away by not following.
 
 **The virtual board was right about everything it models.** Wiring, chips,
 addresses, drivers, error paths — all of it carried over. What it doesn't model
