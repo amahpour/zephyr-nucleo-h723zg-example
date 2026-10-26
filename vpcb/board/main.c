@@ -55,6 +55,9 @@ static int         n_peers;
 static struct link links[MAX_LINKS];
 static int         n_links;
 static int         verbose = 1;
+/* Register read-backs change nothing and the firmware checks each DAC every
+ * 100 ms, so they are only logged with -v. Writes and failures always are. */
+static int         trace_reads;
 static const char *netlist_path;
 static volatile sig_atomic_t reload_requested;
 
@@ -217,16 +220,21 @@ static void route_i2c(struct peer *mcu, uint16_t seq, uint8_t *pl, uint32_t len)
 	if (len < sizeof(*x)) { return; }
 
 	struct peer *ic = find_ic(x->addr);
+	const int quiet = x->wlen <= 1 && x->rlen > 0 && !trace_reads;
 	if (!ic) {
 		struct vpcb_i2c_reply r = { .status = VPCB_NAK, .rlen = 0 };
-		logd("I2C addr=0x%02X wlen=%u rlen=%u -> NAK (no IC at this address)",
-		     x->addr, x->wlen, x->rlen);
+		if (!quiet) {
+			logd("I2C addr=0x%02X wlen=%u rlen=%u -> NAK (no IC at this address)",
+			     x->addr, x->wlen, x->rlen);
+		}
 		vpcb_send(mcu->fd, VPCB_MSG_I2C_REPLY, seq, &r, sizeof(r));
 		return;
 	}
 
-	logd("I2C addr=0x%02X wlen=%u rlen=%u -> %s", x->addr, x->wlen, x->rlen, ic->name);
-	hexdump("W", x->wdata, x->wlen);
+	if (!quiet) {
+		logd("I2C addr=0x%02X wlen=%u rlen=%u -> %s", x->addr, x->wlen, x->rlen, ic->name);
+		hexdump("W", x->wdata, x->wlen);
+	}
 
 	if (vpcb_send(ic->fd, VPCB_MSG_I2C_XFER, seq, pl, len) != 0) {
 		struct vpcb_i2c_reply r = { .status = VPCB_NAK, .rlen = 0 };
@@ -258,8 +266,10 @@ static void route_i2c(struct peer *mcu, uint16_t seq, uint8_t *pl, uint32_t len)
 		logd("  ignoring msg type %u from %s while awaiting reply", rh.type, ic->name);
 	}
 	struct vpcb_i2c_reply *rep = (struct vpcb_i2c_reply *)rbuf;
-	logd("  reply status=%s rlen=%u", vpcb_status_str(rep->status), rep->rlen);
-	if (rep->rlen) { hexdump("R", rep->rdata, rep->rlen); }
+	if (!quiet) {
+		logd("  reply status=%s rlen=%u", vpcb_status_str(rep->status), rep->rlen);
+		if (rep->rlen) { hexdump("R", rep->rdata, rep->rlen); }
+	}
 	vpcb_send(mcu->fd, VPCB_MSG_I2C_REPLY, seq, rbuf, rh.len);
 }
 
@@ -272,6 +282,7 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "--sock") && i + 1 < argc)         { sock = argv[++i]; }
 		else if (!strcmp(argv[i], "--netlist") && i + 1 < argc) { nl = argv[++i]; }
 		else if (!strcmp(argv[i], "-q"))                        { verbose = 0; }
+		else if (!strcmp(argv[i], "-v"))                        { trace_reads = 1; }
 	}
 
 	netlist_path = nl;
