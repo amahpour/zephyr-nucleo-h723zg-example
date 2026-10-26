@@ -530,16 +530,16 @@ Plug A5 back in.
 
 ## Step 10 — Pull SDA
 
-Walkthrough 1's other fault was a chip that stops answering. On the bench,
-pull the DAC's **SDA** wire at the Nucleo end (D14, CN7 pin 4) with channel 0
-holding 2000 mV, then try to change it:
+Walkthrough 1's other fault was a chip that stops answering. On the bench, set
+every channel to 1000 mV, pull the DAC's **SDA** wire at the Nucleo end (D14,
+CN7 pin 4), then try to change channel 0:
 
 ```
 dacset 0 500
 ```
 
 ```
-dacset ch0: write to dacx578@4c FAILED (-5)
+dacset ch0: write to dacx578@4c FAILED (-5) - nothing answered on the bus
 ```
 
 ```
@@ -547,15 +547,15 @@ adcregs
 ```
 
 ```
-    ch[0]: 1997 mV
-    ch[1]: 0 mV
+    ch[0]: 998 mV
+    ch[1]: 1002 mV
 ```
 
 Two things to notice.
 
 **The reading doesn't change, and that's correct.** The DAC is still powered
 and still driving the last value it was given, so channel 0 really is at
-2000 mV. Only the write path is broken. That's why there is no `---`: on a real
+1000 mV. Only the write path is broken. That's why there is no `---`: on a real
 board, `---` means the ADC itself couldn't read, and it could.
 
 **The error code is wrong — on the virtual board.** For a chip that doesn't
