@@ -164,15 +164,16 @@ class TestFaultMatrix:
         """
         A chip pulled from the board.
 
-        bench, partly: the failed write (-19, nothing acknowledged) is exactly
-        the same on hardware. The --- on its channels is twin-only.
+        bench, partly: the failed write (-5, nothing answered) is exactly the
+        same on hardware - checked on the bench with SDA pulled. The --- on its
+        channels is twin-only.
         """
         dut, state = board
         state["chips_touched"] = True
         dut.kill_ic(addr)
 
         resp = dut.send_command(f"dacset {CHIPS[addr][0]} 1000")
-        assert "FAILED (-19)" in resp, f"write to a missing chip did not NAK: {resp!r}"
+        assert "FAILED (-5)" in resp, f"write to a missing chip did not fail: {resp!r}"
 
         regs = read_channels(dut)
         for ch in CHIPS[addr]:
@@ -192,7 +193,7 @@ class TestFaultMatrix:
         number that is the truth about the pin - while writes to the address
         the firmware expects go unanswered.
 
-        bench: yes, identically - -19 on the write, 0 V on the pins.
+        bench: yes, identically - -5 on the write, 0 V on the pins.
         """
         dut, state = board
         state["chips_touched"] = True
@@ -201,7 +202,7 @@ class TestFaultMatrix:
         dut.rewire(readdressed(dut.netlist_lines(), addr, wrong))
 
         resp = dut.send_command(f"dacset {CHIPS[addr][0]} 1000")
-        assert "FAILED (-19)" in resp, f"write to a mis-strapped chip did not NAK: {resp!r}"
+        assert "FAILED (-5)" in resp, f"write to a mis-strapped chip did not fail: {resp!r}"
 
         regs = read_channels(dut)
         for ch in CHIPS[addr]:

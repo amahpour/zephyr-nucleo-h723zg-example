@@ -103,9 +103,9 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 
 	if (st == VPCB_BOTTOM_NO_REPLY) {
 		/* Not a bus event. Nobody answered within the host-side deadline,
-		 * which means the board or an IC process is wedged or gone. Say so
-		 * plainly: -ETIMEDOUT here would let a broken harness masquerade as
-		 * a chip that stretched the clock.
+		 * which means the board or an IC process is wedged or gone. The
+		 * return code is -EIO like every bus failure (see below); the log
+		 * line is what tells a broken harness from a broken chip.
 		 */
 		LOG_ERR("no reply from the virtual PCB within %d ms of host time "
 			"(addr 0x%02x) - board or IC process not responding",
@@ -123,22 +123,32 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 		LOG_ERR("transport failure to virtual PCB");
 		return -EIO;
 	}
+	/*
+	 * Every bus failure returns -EIO, because that is what the real driver
+	 * returns. Zephyr's I2C API promises only -EIO for a failed transfer,
+	 * and the STM32 driver (drivers/i2c/i2c_stm32_v2.c) folds a NACK, lost
+	 * arbitration and a timeout into it. This driver used to return -ENODEV
+	 * for a NACK, on the untested assumption that a real bus would; the
+	 * first bench run read -5 (docs/rca/i2c-nack-error-code.md).
+	 *
+	 * The log line still says which failure it was. The virtual board may
+	 * say more than the real one, but it must not return something else.
+	 */
 	switch (st) {
 	case VPCB_ST_OK:
 		LOG_DBG("xfer addr=0x%02x wlen=%u rlen=%u OK", addr, wlen, rlen);
 		return 0;
 	case VPCB_ST_NAK:
-		/* No device acknowledged: exactly what a real bus reports when the
-		 * chip is absent, unpowered or mis-strapped.
-		 */
+		/* Nothing acknowledged: the chip is absent, unpowered or
+		 * mis-strapped. */
 		LOG_ERR("addr 0x%02x NAK - no device on the virtual bus", addr);
-		return -ENODEV;
+		return -EIO;
 	case VPCB_ST_TIMEOUT:
 		/* Reported by the board as a modelled bus event, not inferred from
 		 * our own silence. Unreachable from a host stall now.
 		 */
 		LOG_ERR("addr 0x%02x timed out on the bus", addr);
-		return -ETIMEDOUT;
+		return -EIO;
 	default:
 		LOG_ERR("addr 0x%02x bus error (status %d)", addr, st);
 		return -EIO;

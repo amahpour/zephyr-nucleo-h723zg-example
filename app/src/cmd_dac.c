@@ -118,7 +118,7 @@ static int cmd_dacset(const struct shell *sh, size_t argc, char **argv)
 		shell_error(sh,
 			    "dacset ch%u: write to %s FAILED (%d)%s",
 			    ch, dev->name, ret,
-			    ret == -ENODEV ? " - device did not ACK" : "");
+			    ret == -EIO ? " - nothing answered on the bus" : "");
 		return ret;
 	}
 
