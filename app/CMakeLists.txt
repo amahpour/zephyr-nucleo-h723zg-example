@@ -58,6 +58,7 @@ if(CONFIG_DAC_DACX578)
     target_sources(app PRIVATE
         drivers/dac_dacx578.c
         src/cmd_dac.c
+        src/dac_health.c
     )
 endif()
 
