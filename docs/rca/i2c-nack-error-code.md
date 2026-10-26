@@ -23,9 +23,10 @@ dacset ch0: write to dacx578@48 FAILED (-19) - device did not ACK
 Same firmware, same driver, same fault, different number. The virtual board
 exists to behave like the real one, so this is a bug in the virtual board.
 
-The readings were right on both boards. With SDA pulled, the real DAC keeps
-driving its last value and `adcregs` shows it. That's a true reading, not a
-stale one: the pin really is at that voltage. Only the write path broke.
+The readings disagreed too, which the second half of this write-up covers.
+With SDA pulled the real DAC keeps driving its last value, so `adcregs` showed a
+true voltage — but from a chip the firmware could no longer reach. The virtual
+board showed `---`.
 
 ## Why `-19` was chosen
 
@@ -85,8 +86,7 @@ Nobody read either, and there was no board to try it on.
 - `i2c_vpcb.c` returns `-EIO` for every bus failure, as the real driver does:
   NAK, a modelled bus timeout, and a stalled simulator.
 - The distinction lives in the log line instead. `E: addr 0x48 NAK - no device
-  on the virtual bus` still says which failure it was. **The virtual board may
-  say more than the real one, but it must not return something different.**
+  on the virtual bus` still says which failure it was, once, when it starts.
 - `dacset` prints `- nothing answered on the bus` after a `-5`, on both boards.
 - The fault matrix asserts `-5`. Walkthroughs 1 and 2, `docs/hardware.md` and
   the site say `-5`.
@@ -95,9 +95,12 @@ Nobody read either, and there was no board to try it on.
 
 | Where | Fault | Result |
 |---|---|---|
-| Real board | SDA pulled | `FAILED (-5)`; readings unchanged, the DAC still drives |
+| Real board, before the fixes | SDA pulled | `FAILED (-5)`; readings unchanged, the DAC still drives |
+| Real board, after | SDA pulled | `FAILED (-5) - nothing answered on the bus`; its 8 channels read `---` |
+| Real board, after | SDA plugged back in | `answering again`; readings return within one cycle |
 | Virtual board | chip process killed | `FAILED (-5) - nothing answered on the bus` |
 | Virtual board | chip strapped to the wrong address | `FAILED (-5) - nothing answered on the bus` |
+| Virtual board | chip killed or mis-strapped | its channels read `---` |
 | Virtual board | fault matrix, all 28 cases | passed |
 
 **Not yet measured on the bench:** a true address NACK (a chip that is present
@@ -112,6 +115,44 @@ mis-strapped breakout would confirm it.
   replays from one. Its `-19` lines are a different path (reading a net the
   virtual board doesn't know), which has no real-hardware counterpart and is
   unchanged.
+
+## The second finding: confident readings from a chip that doesn't answer
+
+When the virtual board loses a chip, its channels read `---`. That came from
+the board, not the firmware: the board knows the chip's pins stopped being
+driven and reports the nets as floating. The firmware itself never asked
+whether the chip was still there.
+
+On the bench nothing tells it the pins stopped, because they didn't. With SDA
+pulled the DAC keeps driving its last value, the ADC reads it, and `adcregs`
+showed a confident 2000 mV from a chip the firmware could not reach.
+
+**Root cause:** the virtual board's `---` for a missing chip depended on
+knowledge real hardware doesn't have, so it passed for a firmware feature it
+wasn't. Nothing checked that the firmware itself noticed.
+
+**Fix:** every sample cycle the firmware reads back a register from each DAC
+(`app/src/dac_health.c`). A DAC that doesn't answer has its channels marked "no
+reading" until it answers again. Both boards now reach `---` the same way, from
+the same I²C answer:
+
+```
+W: dacx578@4c not answering (-5) - its channels read ---
+I: dacx578@4c answering again
+```
+
+Checked on the bench with SDA pulled and plugged back in. The virtual DAC model
+needed one fix to support it: it executed a lone command byte, which the real
+part treats as the start of a read-back.
+
+## The rule, now
+
+The virtual board must give the firmware the same answers the real board does:
+the same return codes, and readings that mean the same thing. It may *log* more,
+because it can see more. The one documented exception is a floating pin: the
+virtual board knows a net is undriven and a real ADC can't, so a cut wire reads
+`---` there and a number on copper. That one isn't hidden; it's tested for, by
+checking a channel follows its DAC ([walkthrough 4](../../walkthroughs/04-real-hardware.md), step 9).
 
 ## Lesson
 

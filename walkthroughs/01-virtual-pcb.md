@@ -252,6 +252,21 @@ The board notices immediately:
 [board 1226992578.046]   net7 released - dac7578@48 no longer drives it
 ```
 
+So does the firmware, on its own, within one sample cycle:
+
+```
+W: net 0 unreadable (-61)
+W: net 1 unreadable (-61)
+...
+W: net 7 unreadable (-61)
+E: addr 0x48 NAK - no device on the virtual bus
+W: dacx578@48 not answering (-5) - its channels read ---
+```
+
+The `W: net` lines are the board telling it those nets now float. The last two
+are the firmware's own check: every sample cycle it reads back a register from
+each DAC, and this one didn't answer.
+
 Now ask the firmware to do the exact same thing that worked a minute ago:
 
 ```
@@ -260,7 +275,6 @@ dacset 0 2000
 
 ```
 [board 597985565.896] I2C addr=0x48 wlen=3 rlen=0 -> NAK (no IC at this address)
-E: addr 0x48 NAK - no device on the virtual bus
 dacset ch0: write to dacx578@48 FAILED (-5) - nothing answered on the bus
 ```
 
@@ -289,11 +303,13 @@ adcregs
     ch[8]: 0 mV
 ```
 
-All eight of that chip's channels read `---`, not a number. The board saw the
-chip leave, and a net with nothing driving it is floating — there is no voltage
-to report, so the firmware reports that there is no reading rather than
-inventing one. [Walkthrough 2](02-fault-injection.md) is about exactly that
-distinction, and why real hardware can't make it.
+All eight of that chip's channels read `---`, not a number, and two things say
+so. The board saw the chip leave, so those nets are floating and there is no
+voltage to report. And the firmware's check found the chip no longer answers, so
+it can't vouch for those channels whatever they read. Only the second carries
+over to real hardware: a real ADC can't know a pin is floating, but the firmware
+can always tell a chip has stopped answering.
+[Walkthrough 2](02-fault-injection.md) is about exactly that distinction.
 
 ```
 dacset 8 1500
@@ -317,11 +333,14 @@ dacset 8 1000
 ```
 
 ```
+E: no reply from the virtual PCB within 1000 ms of host time (addr 0x4c) - board or IC process not responding
+dacset ch8: write to dacx578@4c FAILED (-5) - nothing answered on the bus
 E: no reply from the virtual PCB within 1000 ms of host time (net 0) - board process not responding
 W: net 0 unreadable (-5)
 ```
 
-`-5` is `-EIO`, and the message names the board process, not the bus. That
+The return code is the same `-5` as a missing chip — that's what real hardware
+would return — but the `E:` line names the board process, not the bus. That
 distinction is deliberate. A frozen simulator is *your test rig breaking*, not a
 device misbehaving, and reporting it as an I²C timeout would send you debugging
 firmware that is working fine. Errors from a test harness should never be able

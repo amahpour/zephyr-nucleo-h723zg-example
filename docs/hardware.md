@@ -280,6 +280,11 @@ Asking a one-breakout build for channel 8 or above is refused with
 A `-5` failure means nothing answered on the bus: the part is absent,
 unpowered or mis-strapped, or SDA or SCL is off. The STM32 driver reports every
 I²C failure as `-5`, so the code alone can't say which; check the wiring first.
+
+The firmware also reads back a register from each DAC every sample cycle. While
+one doesn't answer, `adcregs` shows `---` on its channels, with one line each
+way: `W: dacx578@4c not answering (-5) - its channels read ---`, then
+`I: dacx578@4c answering again`.
 (The virtual board once said `-19` here. See
 [the root-cause write-up](rca/i2c-nack-error-code.md).)
 

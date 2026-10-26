@@ -488,6 +488,11 @@ Run the same tests against the firmware from Step 1 and **19 fail, 9 pass**.
 Every failure is a test that needs the virtual board's extra knowledge — the
 honest limit of what a virtual board can promise about real hardware.
 
+That table is as it stood at this fix. The first bench run later moved two rows:
+the firmware now checks every cycle that each DAC still answers, so a pulled or
+dropping-out chip reads `---` on a real board too. See
+[Walkthrough 4](04-real-hardware.md), step 10.
+
 ---
 
 ## Cleanup
