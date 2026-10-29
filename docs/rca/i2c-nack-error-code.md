@@ -111,8 +111,10 @@ mis-strapped breakout would confirm it.
 ## What stays as it was
 
 - Videos already published show `-19`. That was the code at the time.
-- Tags such as `before-fault-model` show `-19` where it was, and walkthrough 3
-  replays from one. Its `-19` lines are a different path (reading a net the
+- Tags such as `before-fault-model` and `before-sda-pull` show `-19` where it
+  was. Walkthrough 3 replays from the first, walkthrough 4 step 10 from the
+  second.
+- Walkthrough 3's own `-19` lines are a different path (reading a net the
   virtual board doesn't know), which has no real-hardware counterpart and is
   unchanged.
 
