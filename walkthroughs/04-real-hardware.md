@@ -448,6 +448,19 @@ Same test names as Step 3. Completely different questions.
 
 ## Step 9 — Cut a wire
 
+**Starting here?** The tag `before-sda-pull` is the repository at the end of
+step 8: the sampling fix and the 50 mV tolerance are in, the virtual board
+still returns `-19`, and nothing checks that the DAC is answering. Set up the
+shell as in step 2, then make your branch from it and build and flash:
+
+```bash
+git checkout -b bench-it-myself before-sda-pull
+```
+
+```bash
+west build -b nucleo_h723zg app -d build-hw --pristine && west flash -d build-hw --runner openocd
+```
+
 On the virtual board, a cut wire reads `---`, because the board knows nothing
 is driving the pin. [Walkthrough 2](02-fault-injection.md#step-10--what-the-twin-cant-promise)
 admitted real copper can't know that, and guessed the bench would need "a test
