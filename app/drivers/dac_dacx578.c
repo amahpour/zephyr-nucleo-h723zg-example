@@ -32,6 +32,8 @@ LOG_MODULE_REGISTER(dac_dacx578, CONFIG_DAC_LOG_LEVEL);
 #define DACX578_CMD_WRITE_UPDATE_ALL 0x2
 #define DACX578_CMD_WRITE_UPDATE_CH  0x3
 
+#include "dac_dacx578.h"
+
 struct dacx578_config {
 	struct i2c_dt_spec bus;
 	uint8_t resolution;
@@ -85,6 +87,20 @@ static int dacx578_write_value(const struct device *dev, uint8_t channel,
 	buf[2] = (uint8_t)(data & 0xFF);
 
 	return i2c_write_dt(&config->bus, buf, sizeof(buf));
+}
+
+int dacx578_check(const struct device *dev)
+{
+	const struct dacx578_config *config = dev->config;
+	/* Read back channel 0's DAC register: the command byte, then a repeated
+	 * start and two data bytes (datasheet, Table 6 and the read sequences).
+	 * Nothing is written - a command only takes effect after a full data
+	 * byte pair - so this changes no output.
+	 */
+	uint8_t ca = DACX578_CMD_UPDATE_DAC << 4;
+	uint8_t data[2];
+
+	return i2c_write_read_dt(&config->bus, &ca, 1, data, sizeof(data));
 }
 
 static int dacx578_init(const struct device *dev)

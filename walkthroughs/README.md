@@ -13,6 +13,7 @@ chasing, not a typo in the docs.
 | 1 | [Run the virtual PCB](01-virtual-pcb.md) — build a board out of Linux processes, drive a DAC across a socket, read it back on the ADC, then unplug the chip mid-session | Linux or WSL, no hardware |
 | 2 | [Fault injection](02-fault-injection.md) — cut a trace on a running board, pull and mis-strap chips, and check the firmware says which readings are real; then 28 faults in about 23 seconds | Walkthrough 1's build |
 | 3 | [Fix it layer by layer](03-fix-it-layer-by-layer.md) — go back to before the fix, watch a cut trace read as a confident 0 mV, then apply the real fix one commit at a time until it reads `---` | Walkthrough 1's toolchain |
+| 4 | [Put it on real hardware](04-real-hardware.md) — wire up the real board, run the tests as they were, then replace them with tests the old rig couldn't run; the first one finds a real ADC bug the virtual board can't see, and the fix is one line | A NUCLEO-H723ZG, one DAC7578 breakout, 12 jumper wires |
 
 Start with the [README prerequisites](../README.md#prerequisites) if you haven't
 installed the Zephyr toolchain yet.

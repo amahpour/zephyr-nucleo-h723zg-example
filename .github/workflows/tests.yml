@@ -150,3 +150,4 @@ jobs:
             build/zephyr/zephyr.elf
             build/zephyr/zephyr.bin
             build/zephyr/zephyr.hex
+            tests/integration/results/

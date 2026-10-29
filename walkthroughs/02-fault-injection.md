@@ -150,9 +150,7 @@ instead of the `0 mV` it would once have printed, which looked exactly like a
 channel genuinely sitting at zero volts.
 
 `-61` is `-ENODATA`: the net exists, but nothing is driving it. It's a different
-fault from the `-19` you met in Walkthrough 1 (nothing answered on the bus) and
-the `-5` (the simulator itself stopped answering). Three different failures,
-three different answers.
+fault from the `-5` you met in Walkthrough 1, where nothing answered on the bus.
 
 ## Step 5 — Restore the trace
 
@@ -215,6 +213,17 @@ The board releases everything that chip was driving:
 [board 1226992578.046]   net7 released - dac7578@48 no longer drives it
 ```
 
+And the firmware notices on its own:
+
+```
+W: net 0 unreadable (-61)
+W: net 1 unreadable (-61)
+...
+W: net 7 unreadable (-61)
+E: addr 0x48 NAK - no device on the virtual bus
+W: dacx578@48 not answering (-5) - its channels read ---
+```
+
 ```
 adcregs
 ```
@@ -231,10 +240,21 @@ All eight of U1's channels go to `---`. Channel 8 belongs to U2, which is still
 fitted and still driving 0 V, so it reads a real 0 mV. Same number on the
 screen, completely different meaning — and now you can tell them apart.
 
+Two things put U1's channels at `---`: the board says their nets float, and the
+firmware's own check says U1 stopped answering. On a real board only the second
+can happen, and it's enough.
+
 Put the chip back:
 
 ```bash
 ./build-vpcb/vpcb-dac7578 --sock /tmp/vpcb.sock --addr 0x48 -q &
+```
+
+```
+I: net 0 readable again
+...
+I: net 7 readable again
+I: dacx578@48 answering again
 ```
 
 ```
@@ -265,15 +285,23 @@ the same traces. So the netlist has to follow it:
 sed -i 's/^0x4c/0x4d/' /tmp/board.netlist && pkill -HUP -x vpcb-board
 ```
 
-Now write to U2 the way the firmware expects to:
+```
+W: dacx578@4c not answering (-5) - its channels read ---
+I: net 8 readable again
+...
+I: net 14 readable again
+```
+
+The nets are driven again — by the chip at `0x4d`. But nothing answers at
+`0x4c`, where the firmware expects U2. Now write to U2 the way the firmware
+expects to:
 
 ```
 dacset 8 1500
 ```
 
 ```
-E: addr 0x4c NAK - no device on the virtual bus
-dacset ch8: write to dacx578@4c FAILED (-19) - device did not ACK
+dacset ch8: write to dacx578@4c FAILED (-5) - nothing answered on the bus
 ```
 
 ```
@@ -281,16 +309,16 @@ adcregs
 ```
 
 ```
-    ch[8]: 0 mV
-    ch[9]: 0 mV
+    ch[8]: ---
+    ch[9]: ---
     ...
-    ch[14]: 0 mV
+    ch[14]: ---
 ```
 
-This is the one case in this walkthrough where a confident `0 mV` is **the
-truth**. The chip is fitted, powered and driving its pins at zero-scale. It's
-just answering at an address nobody is talking to. A real board behaves exactly
-the same way: `-19` on the write, 0 V on the pins.
+The pins really are at 0 V: the chip is fitted, powered and driving them at
+zero-scale. But the firmware drives them through `0x4c`, and nothing answers
+there, so it can't vouch for them and says so. A real board behaves exactly the
+same way: `-5` on the write, `---` on the channels.
 
 Put everything back before moving on:
 
@@ -318,23 +346,23 @@ test_faults.py::TestFaultMatrix::test_cut_trace[ch00-twin-only] PASSED
 test_faults.py::TestFaultMatrix::test_cut_trace[ch01-twin-only] PASSED
 ...
 test_faults.py::TestFaultMatrix::test_swapped_wires[ch07-ch08-bench] PASSED
-test_faults.py::TestFaultMatrix::test_chip_missing[0x48-bench-partial] PASSED
+test_faults.py::TestFaultMatrix::test_chip_missing[0x48-bench] PASSED
 test_faults.py::TestFaultMatrix::test_wrong_strap[0x4c-as-0x4d-bench] PASSED
 test_faults.py::TestFaultMatrix::test_part_at_datasheet_limit[gain-ppm1500-bench] PASSED
 test_faults.py::TestFaultMatrix::test_intermittent_chip PASSED
 test_faults.py::TestFaultMatrix::test_intermittent_trace PASSED
 
-============================= 28 passed in 22.98s ==============================
+============================= 28 passed in 22.46s ==============================
 ```
 
 | Cases | Fault | Could real hardware detect it? |
 |---:|---|---|
 | 15 | One trace cut, on each channel | **No** — `twin-only` |
 | 3 | Two wires crossed (one pair crosses between chips) | **Yes** — by driving distinct values |
-| 2 | A chip pulled | **Partly** — the `-19` yes, the `---` no |
+| 2 | A chip pulled | **Yes** — `-5` on the write, `---` on its channels |
 | 2 | A chip strapped to the wrong address | **Yes**, identically |
 | 4 | A DAC at each of its datasheet offset and gain limits | **Yes** — real parts land in here |
-| 2 | A chip dropping out; a trace opening and closing | **Partly** / no |
+| 2 | A chip dropping out; a trace opening and closing | **Yes** / no |
 
 Every case enforces the same rule: **`adcregs` shows the right number or `---`,
 never a confident wrong number.** The one exception is crossed wires — each
@@ -362,12 +390,15 @@ information doesn't exist there.
 
 So here's what carries over to hardware, and what doesn't:
 
-- **Carries over:** `-19` on a missing or mis-strapped chip, crossed wires caught
-  by distinct values, datasheet error inside your tolerances, and every layer of
-  the firmware passing along "not a real reading" when a read genuinely fails.
+- **Carries over:** `-5` and `---` for a missing, mis-strapped or dropped-out
+  chip (the firmware's own check decides that, so copper gives the same answer),
+  crossed wires caught by distinct values, datasheet error inside your
+  tolerances, and every layer of the firmware passing along "not a real reading"
+  when a read genuinely fails.
 - **Twin-only:** knowing a net is floating. On the bench you'd need extra
   hardware for that — a pull resistor that drags a floating pin to a known rail,
   or a test that checks a channel moves when you expect it to.
+  [Walkthrough 4](04-real-hardware.md) does the second on a real board.
 
 That's the honest boundary of a digital twin. It's worth more than a mock because
 it can be broken the way hardware breaks — and worth stating plainly where it

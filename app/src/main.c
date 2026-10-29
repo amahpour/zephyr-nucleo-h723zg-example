@@ -8,6 +8,7 @@
 #include <zephyr/logging/log.h>
 #include "regs.h"
 #include "adc_backend.h"
+#include "dac_health.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -45,6 +46,7 @@ static void sample_thread_entry(void *p1, void *p2, void *p3)
     while (1) {
         ret = adc_backend_sample_all(samples, valid);
         if (ret == 0) {
+            dac_health_apply(valid);
             regs_update(samples, valid);
         } else {
             LOG_ERR("ADC sample failed: %d", ret);

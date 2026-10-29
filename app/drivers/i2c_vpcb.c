@@ -69,6 +69,13 @@ static int i2c_vpcb_configure(const struct device *dev, uint32_t cfg)
 	return 0;
 }
 
+/* How the last transfer to each 7-bit address ended. */
+enum xfer_kind {
+	XFER_OK = 0, XFER_NO_REPLY, XFER_DETACHED, XFER_TRANSPORT,
+	XFER_NAK, XFER_TIMEOUT, XFER_BUS,
+};
+static uint8_t last_kind[128];
+
 static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 			     uint8_t num_msgs, uint16_t addr)
 {
@@ -100,49 +107,83 @@ static int i2c_vpcb_transfer(const struct device *dev, struct i2c_msg *msgs,
 	}
 
 	int st = vpcb_bottom_i2c(addr, wbuf, wlen, rptr, rlen, VPCB_XFER_TIMEOUT_MS);
+	enum xfer_kind kind;
 
 	if (st == VPCB_BOTTOM_NO_REPLY) {
-		/* Not a bus event. Nobody answered within the host-side deadline,
-		 * which means the board or an IC process is wedged or gone. Say so
-		 * plainly: -ETIMEDOUT here would let a broken harness masquerade as
-		 * a chip that stretched the clock.
-		 */
-		LOG_ERR("no reply from the virtual PCB within %d ms of host time "
-			"(addr 0x%02x) - board or IC process not responding",
-			VPCB_XFER_TIMEOUT_MS, addr);
-		return -EIO;
+		kind = XFER_NO_REPLY;
+	} else if (st == VPCB_BOTTOM_DETACHED) {
+		kind = XFER_DETACHED;
+	} else if (st < 0) {
+		kind = XFER_TRANSPORT;
+	} else if (st == VPCB_ST_OK) {
+		kind = XFER_OK;
+	} else if (st == VPCB_ST_NAK) {
+		kind = XFER_NAK;
+	} else if (st == VPCB_ST_TIMEOUT) {
+		kind = XFER_TIMEOUT;
+	} else {
+		kind = XFER_BUS;
 	}
-	if (st == VPCB_BOTTOM_DETACHED) {
-		/* Also the harness, not the bus: the board process is not running.
-		 * The bottom half reattaches by itself once it is back. */
-		LOG_ERR("virtual PCB detached (addr 0x%02x) - board process is not "
-			"running; will reattach when it returns", addr);
-		return -EIO;
+
+	/* Log a fault when it starts, not on every transfer: the firmware checks
+	 * each DAC ten times a second, and a chip that is gone would otherwise
+	 * print a line every 100 ms. */
+	if (kind != last_kind[addr & 0x7F]) {
+		last_kind[addr & 0x7F] = kind;
+		switch (kind) {
+		case XFER_NO_REPLY:
+			/* Not a bus event. Nobody answered within the host-side
+			 * deadline, which means the board or an IC process is wedged
+			 * or gone. The return code is -EIO like every bus failure
+			 * (see below); the log line is what tells a broken harness
+			 * from a broken chip. */
+			LOG_ERR("no reply from the virtual PCB within %d ms of host time "
+				"(addr 0x%02x) - board or IC process not responding",
+				VPCB_XFER_TIMEOUT_MS, addr);
+			break;
+		case XFER_DETACHED:
+			/* Also the harness, not the bus: the board process is not
+			 * running. The bottom half reattaches by itself. */
+			LOG_ERR("virtual PCB detached (addr 0x%02x) - board process is not "
+				"running; will reattach when it returns", addr);
+			break;
+		case XFER_TRANSPORT:
+			LOG_ERR("transport failure to virtual PCB");
+			break;
+		case XFER_NAK:
+			/* Nothing acknowledged: the chip is absent, unpowered or
+			 * mis-strapped. */
+			LOG_ERR("addr 0x%02x NAK - no device on the virtual bus", addr);
+			break;
+		case XFER_TIMEOUT:
+			/* Reported by the board as a modelled bus event, not inferred
+			 * from our own silence. */
+			LOG_ERR("addr 0x%02x timed out on the bus", addr);
+			break;
+		case XFER_BUS:
+			LOG_ERR("addr 0x%02x bus error (status %d)", addr, st);
+			break;
+		case XFER_OK:
+			break;
+		}
 	}
-	if (st < 0) {
-		LOG_ERR("transport failure to virtual PCB");
-		return -EIO;
-	}
-	switch (st) {
-	case VPCB_ST_OK:
+
+	/*
+	 * Every bus failure returns -EIO, because that is what the real driver
+	 * returns. Zephyr's I2C API promises only -EIO for a failed transfer,
+	 * and the STM32 driver (drivers/i2c/i2c_stm32_v2.c) folds a NACK, lost
+	 * arbitration and a timeout into it. This driver used to return -ENODEV
+	 * for a NACK, on the untested assumption that a real bus would; the
+	 * first bench run read -5 (docs/rca/i2c-nack-error-code.md).
+	 *
+	 * The log line still says which failure it was. The virtual board may
+	 * say more than the real one, but it must not return something else.
+	 */
+	if (kind == XFER_OK) {
 		LOG_DBG("xfer addr=0x%02x wlen=%u rlen=%u OK", addr, wlen, rlen);
 		return 0;
-	case VPCB_ST_NAK:
-		/* No device acknowledged: exactly what a real bus reports when the
-		 * chip is absent, unpowered or mis-strapped.
-		 */
-		LOG_ERR("addr 0x%02x NAK - no device on the virtual bus", addr);
-		return -ENODEV;
-	case VPCB_ST_TIMEOUT:
-		/* Reported by the board as a modelled bus event, not inferred from
-		 * our own silence. Unreachable from a host stall now.
-		 */
-		LOG_ERR("addr 0x%02x timed out on the bus", addr);
-		return -ETIMEDOUT;
-	default:
-		LOG_ERR("addr 0x%02x bus error (status %d)", addr, st);
-		return -EIO;
 	}
+	return -EIO;
 }
 
 int vpcb_net_read_mv(uint32_t net, int32_t *millivolts)

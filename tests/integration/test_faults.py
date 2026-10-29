@@ -159,20 +159,21 @@ class TestFaultMatrix:
         assert_close(regs, b, VALUES[a])
         assert_others_healthy(regs, skip={a, b})
 
-    @pytest.mark.parametrize("addr", list(CHIPS), ids=lambda a: f"{a}-bench-partial")
+    @pytest.mark.parametrize("addr", list(CHIPS), ids=lambda a: f"{a}-bench")
     def test_chip_missing(self, board, addr):
         """
         A chip pulled from the board.
 
-        bench, partly: the failed write (-19, nothing acknowledged) is exactly
-        the same on hardware. The --- on its channels is twin-only.
+        bench: yes, identically - checked on the bench with SDA pulled. The
+        write fails with -5, and the firmware's DAC check marks the chip's
+        channels --- because the part that drives them stopped answering.
         """
         dut, state = board
         state["chips_touched"] = True
         dut.kill_ic(addr)
 
         resp = dut.send_command(f"dacset {CHIPS[addr][0]} 1000")
-        assert "FAILED (-19)" in resp, f"write to a missing chip did not NAK: {resp!r}"
+        assert "FAILED (-5)" in resp, f"write to a missing chip did not fail: {resp!r}"
 
         regs = read_channels(dut)
         for ch in CHIPS[addr]:
@@ -187,12 +188,12 @@ class TestFaultMatrix:
         or ADDR1 high instead of low. The strap table is in docs/hardware.md.
 
         The strap moves the chip's address, not its wiring: it is still
-        soldered to the same traces, so the netlist follows it. Its outputs sit
-        at power-on zero-scale, so its channels read a REAL 0 mV - a confident
-        number that is the truth about the pin - while writes to the address
-        the firmware expects go unanswered.
+        soldered to the same traces, so the netlist follows it. Its pins sit at
+        power-on zero-scale, a real 0 V - but nothing answers at the address
+        the firmware drives them through, so it can't vouch for them, and its
+        channels read ---.
 
-        bench: yes, identically - -19 on the write, 0 V on the pins.
+        bench: yes, identically - -5 on the write, --- on its channels.
         """
         dut, state = board
         state["chips_touched"] = True
@@ -201,11 +202,12 @@ class TestFaultMatrix:
         dut.rewire(readdressed(dut.netlist_lines(), addr, wrong))
 
         resp = dut.send_command(f"dacset {CHIPS[addr][0]} 1000")
-        assert "FAILED (-19)" in resp, f"write to a mis-strapped chip did not NAK: {resp!r}"
+        assert "FAILED (-5)" in resp, f"write to a mis-strapped chip did not fail: {resp!r}"
 
         regs = read_channels(dut)
         for ch in CHIPS[addr]:
-            assert_close(regs, ch, 0)
+            assert regs[ch] is None, (
+                f"ch[{ch}] reads {regs[ch]} mV, but the chip that drives it doesn't answer")
         assert_others_healthy(regs, skip=set(CHIPS[addr]))
 
     @pytest.mark.parametrize("flag,value", LIMITS,
@@ -251,7 +253,8 @@ class TestFaultMatrix:
         the truth. A 0 mV while it is gone is the firmware inventing a
         reading - and is exactly what it used to do.
 
-        bench, partly: the write failures are real; the --- is twin-only.
+        bench: yes - the firmware's DAC check marks its channels --- while it
+        doesn't answer, on copper as here.
         """
         dut, state = board
         state["chips_touched"] = True

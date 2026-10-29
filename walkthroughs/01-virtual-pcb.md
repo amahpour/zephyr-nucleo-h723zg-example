@@ -252,6 +252,21 @@ The board notices immediately:
 [board 1226992578.046]   net7 released - dac7578@48 no longer drives it
 ```
 
+So does the firmware, on its own, within one sample cycle:
+
+```
+W: net 0 unreadable (-61)
+W: net 1 unreadable (-61)
+...
+W: net 7 unreadable (-61)
+E: addr 0x48 NAK - no device on the virtual bus
+W: dacx578@48 not answering (-5) - its channels read ---
+```
+
+The `W: net` lines are the board telling it those nets now float. The last two
+are the firmware's own check: every sample cycle it reads back a register from
+each DAC, and this one didn't answer.
+
 Now ask the firmware to do the exact same thing that worked a minute ago:
 
 ```
@@ -260,13 +275,14 @@ dacset 0 2000
 
 ```
 [board 597985565.896] I2C addr=0x48 wlen=3 rlen=0 -> NAK (no IC at this address)
-E: addr 0x48 NAK - no device on the virtual bus
-dacset ch0: write to dacx578@48 FAILED (-19) - device did not ACK
+dacset ch0: write to dacx578@48 FAILED (-5) - nothing answered on the bus
 ```
 
-`-19` is `-ENODEV`, and it arrived by the honest route: the driver issued a real
-transfer, nothing acknowledged the address, and the error propagated up through
-the Zephyr I²C API. There was no rebuild, no `--inject-failure` flag, no mock
+`-5` is `-EIO`, the same code the real STM32 I²C driver returns when nothing
+answers — and it arrived by the honest route: the driver issued a real transfer,
+nothing acknowledged the address, and the error propagated up through the Zephyr
+I²C API. (It used to say `-19`, until the real board disagreed: see
+[the root-cause write-up](../docs/rca/i2c-nack-error-code.md).) There was no rebuild, no `--inject-failure` flag, no mock
 object and no `#ifdef`. A process stopped existing.
 
 On the bench this is an unpopulated footprint, a cold solder joint, a part held
@@ -287,11 +303,13 @@ adcregs
     ch[8]: 0 mV
 ```
 
-All eight of that chip's channels read `---`, not a number. The board saw the
-chip leave, and a net with nothing driving it is floating — there is no voltage
-to report, so the firmware reports that there is no reading rather than
-inventing one. [Walkthrough 2](02-fault-injection.md) is about exactly that
-distinction, and why real hardware can't make it.
+All eight of that chip's channels read `---`, not a number, and two things say
+so. The board saw the chip leave, so those nets are floating and there is no
+voltage to report. And the firmware's check found the chip no longer answers, so
+it can't vouch for those channels whatever they read. Only the second carries
+over to real hardware: a real ADC can't know a pin is floating, but the firmware
+can always tell a chip has stopped answering.
+[Walkthrough 2](02-fault-injection.md) is about exactly that distinction.
 
 ```
 dacset 8 1500
@@ -315,11 +333,14 @@ dacset 8 1000
 ```
 
 ```
+E: no reply from the virtual PCB within 1000 ms of host time (addr 0x4c) - board or IC process not responding
+dacset ch8: write to dacx578@4c FAILED (-5) - nothing answered on the bus
 E: no reply from the virtual PCB within 1000 ms of host time (net 0) - board process not responding
 W: net 0 unreadable (-5)
 ```
 
-`-5` is `-EIO`, and the message names the board process, not the bus. That
+The return code is the same `-5` as a missing chip — that's what real hardware
+would return — but the `E:` line names the board process, not the bus. That
 distinction is deliberate. A frozen simulator is *your test rig breaking*, not a
 device misbehaving, and reporting it as an I²C timeout would send you debugging
 firmware that is working fine. Errors from a test harness should never be able
@@ -421,9 +442,11 @@ with a config option is a chip that's still there. A missing chip that's a
 process you killed produces a NAK because there is genuinely nothing on the
 other end of the socket.
 
-**A broken harness must not look like a broken device.** `-19` means the part
-didn't answer. `-5` means the simulator didn't. Collapsing those into one error
-code costs somebody a day.
+**A broken harness must not look like a broken device — but it must return
+what the hardware returns.** On a real board every I²C failure is `-5`, so it is
+here too. What tells them apart is the `E:` line before it: `NAK - no device on
+the virtual bus` means the part didn't answer; `no reply from the virtual PCB`
+means the simulator didn't.
 
 ## Where to go next
 

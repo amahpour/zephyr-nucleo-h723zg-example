@@ -277,8 +277,16 @@ That is the one-breakout build; with two, channel 0 is served by `dacx578@48`.
 Asking a one-breakout build for channel 8 or above is refused with
 `channel must be 0..7 - this board is built with 1 DAC`.
 
-A `-19` failure means nothing acknowledged the address: the part is absent,
-unpowered or mis-strapped.
+A `-5` failure means nothing answered on the bus: the part is absent,
+unpowered or mis-strapped, or SDA or SCL is off. The STM32 driver reports every
+I²C failure as `-5`, so the code alone can't say which; check the wiring first.
+
+The firmware also reads back a register from each DAC every sample cycle. While
+one doesn't answer, `adcregs` shows `---` on its channels, with one line each
+way: `W: dacx578@4c not answering (-5) - its channels read ---`, then
+`I: dacx578@4c answering again`.
+(The virtual board once said `-19` here. See
+[the root-cause write-up](rca/i2c-nack-error-code.md).)
 
 ### What the Loopback Can't Tell You
 
@@ -286,6 +294,29 @@ The board drives its own test signal and then measures it. A fault that corrupts
 the DAC write and the ADC read identically would pass. Keep a scope on a couple
 of outputs as an independent witness, and use the virtual PCB — where the IC
 model is a separate process — for fault injection.
+
+A probe is part of the circuit, though. On the firmware before the
+sampling-time fix (below), A4's worst error over the sweep was −78 mV with a 1X
+scope probe clipped to it and −133 mV without: the ADC was borrowing charge from
+the probe's capacitance. Measure with a probe, but know it can change the
+reading it is there to check.
+
+### What the Virtual Board Can't Tell You
+
+The virtual PCB models what a circuit does, not how long it takes. The first
+bench run found a bug the virtual board passed at every step: the ADC was set to
+the shortest sampling window it has, too short for its sampling capacitor to
+charge through the pin. A4 read 214 mV low at 3.2 V, the other inputs on ADC3
+sagged the same way, and the ADC1 inputs read high. The fix is one line in
+`app/targets/hw/adc_backend.c`, a file the virtual board never builds.
+[Walkthrough 4](../walkthroughs/04-real-hardware.md) finds and fixes it.
+
+It goes the other way too. On the virtual board a cut wire reads `---`, because
+the board knows the net is undriven. On the bench, a cut wire leaves the pin
+floating and the ADC reads whatever charge is on it — with A5 unplugged, 95 mV
+when the DAC was at 0 and 281 mV when it was at 2.8 V. The loopback still
+catches it, because a cut input doesn't follow its DAC: every round of
+`test_channel_isolation` failed on channel 5, and only on channel 5.
 
 ## ADC Channel Mapping
 
@@ -434,6 +465,15 @@ PYTHONPATH=tests/integration pytest tests/integration/ \
   --config=tests/integration/configs/physical.yaml -v
 ```
 
+About two minutes, most of it `test_voltage_sweep`: every channel from 50 mV to
+3.25 V in 25 mV steps. It writes its readings to
+`tests/integration/results/voltage_sweep-physical.csv` and plots their errors
+in `voltage_sweep-physical.svg`. Add `-s` to print the worst error per channel.
+
+The DAC holds its outputs through a firmware flash and between runs, so a
+channel you set by hand is still driven when the tests start. Power-cycle the
+rig, or `dacset` every channel to 0, for a clean start.
+
 ### Virtual PCB Tests
 
 Same instrument, no hardware:
@@ -466,8 +506,10 @@ PYTHONPATH=tests/integration pytest tests/integration/ \
 ## Retired Rig: Bench Supply + Mux
 
 **Retired 2026-09. Not used by any config.** Kept for reference, because it is
-why `PHYSICAL_TOLERANCE` in `tests/integration/test_adc.py` is 150 mV, and why
-`test_channel_isolation` only drives one channel at a time.
+why `PHYSICAL_TOLERANCE` in `tests/integration/test_adc.py` was 150 mV, and why
+`test_channel_isolation` only drove one channel at a time. Both changed once the
+DAC rig ran on the bench: see
+[walkthrough 4](../walkthroughs/04-real-hardware.md).
 
 The original rig fanned a single bench-supply output through a 16:1 analog
 multiplexer. That meant **only one channel could ever be driven at a time**, and
@@ -565,7 +607,7 @@ The CD74HC4067 analog multiplexer has significant on-resistance (Ron) that cause
 
 ##### Mitigation Options
 
-1. **Accept the tolerance** - Tests use 150mV tolerance to account for this
+1. **Accept the tolerance** - Tests used a 150mV tolerance to account for this
 2. **Software calibration** - Apply per-channel offset correction in firmware
 3. **Buffer amplifier** - Add unity-gain op-amp between mux output and ADC input
 4. **Lower-Ron mux** - Use ADG1606/ADG1607 (~4Ω Ron) for higher accuracy

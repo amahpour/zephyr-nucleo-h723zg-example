@@ -48,6 +48,7 @@ static int      vref_uv    = 3300000; /* VREFIN; full scale equals it    */
 static int      offset_uv;            /* datasheet: 0.5 mV typ, +/-4 mV max */
 static int      gain_ppm;             /* datasheet: +/-0.15 % FSR max       */
 static int      verbose = 1;
+static int trace_reads;   /* -v: also log register read-backs */
 static uint16_t my_addr = 0x48;
 static char     my_name[VPCB_NAME_LEN] = "dac7578@48";
 
@@ -113,7 +114,14 @@ static uint16_t handle_write(int fd, const uint8_t *w, uint16_t wlen)
 	uint8_t access = ca & 0x0F;
 	uint16_t data  = 0;
 
-	if (wlen >= 3) { data = ((uint16_t)w[1] << 8) | w[2]; }
+	/* A command byte on its own only selects a register to read back. The
+	 * real part acts on a command at the acknowledge after its second data
+	 * byte (datasheet, MSDB and LSDB), so a short write changes nothing. */
+	if (wlen < 3) {
+		if (trace_reads) { logd("SELECT ca=0x%02X for read-back", ca); }
+		return VPCB_OK;
+	}
+	data = ((uint16_t)w[1] << 8) | w[2];
 	uint16_t code = data >> (16 - resolution);   /* left-justified */
 
 	logd("XFER ca=0x%02X (cmd=0x%X access=0x%X) data=0x%04X code=%u",
@@ -234,6 +242,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--gain-ppm") && i + 1 < argc)  { gain_ppm = atoi(argv[++i]); }
 		else if (!strcmp(argv[i], "--res") && i + 1 < argc)  { resolution = atoi(argv[++i]); }
 		else if (!strcmp(argv[i], "-q"))                     { verbose = 0; }
+		else if (!strcmp(argv[i], "-v"))                     { trace_reads = 1; }
 	}
 	snprintf(my_name, sizeof(my_name), "dac7578@%02X", my_addr);
 
@@ -277,7 +286,7 @@ int main(int argc, char **argv)
 			rep->rdata[0] = v >> 8;
 			rep->rdata[1] = v & 0xFF;
 			rep->rlen = (x->rlen < 2) ? x->rlen : 2;
-			logd("  READBACK ch%u -> 0x%04X", ch, v);
+			if (trace_reads) { logd("  READBACK ch%u -> 0x%04X", ch, v); }
 		}
 		vpcb_send(fd, VPCB_MSG_I2C_REPLY, h.seq, out,
 			  (uint32_t)(sizeof(*rep) + rep->rlen));

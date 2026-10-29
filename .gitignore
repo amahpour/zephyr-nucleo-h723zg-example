@@ -34,3 +34,6 @@ Thumbs.db
 *.tmp
 /tmp/
 
+
+# Integration test output (voltage sweep CSV and plots)
+tests/integration/results/

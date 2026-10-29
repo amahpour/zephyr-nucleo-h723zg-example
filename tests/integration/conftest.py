@@ -140,5 +140,5 @@ def pytest_generate_tests(metafunc):
                 # Parametrize channel-based tests
                 if "channel" in metafunc.fixturenames:
                     metafunc.parametrize("channel", range(num_channels))
-                if "driven_channel" in metafunc.fixturenames:
-                    metafunc.parametrize("driven_channel", range(num_channels))
+                if "rotation" in metafunc.fixturenames:
+                    metafunc.parametrize("rotation", range(num_channels))

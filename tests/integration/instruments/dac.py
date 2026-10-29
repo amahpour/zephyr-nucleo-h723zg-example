@@ -54,10 +54,11 @@ class DacInstrument(InstrumentBase):
         if "OK" not in response:
             raise RuntimeError(
                 f"DAC write failed for channel {channel} at {voltage_mv} mV. "
-                f"-19 means nothing acknowledged the address: on a virtual PCB "
-                f"no IC process is serving it, on hardware the part is absent, "
-                f"unpowered or mis-strapped. -5 means the virtual PCB itself "
-                f"stopped answering. Response: {response!r}"
+                f"-5 means nothing answered on the bus: on hardware the part is "
+                f"absent, unpowered or mis-strapped, or SDA/SCL is off; on a "
+                f"virtual PCB no IC process is serving the address, or the board "
+                f"itself stopped answering - the E: line before it says which. "
+                f"Response: {response!r}"
             )
 
     def enable_output(self, channel: int, enable: bool) -> None:

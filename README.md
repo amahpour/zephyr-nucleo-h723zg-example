@@ -176,7 +176,8 @@ pytest test_adc.py --config=configs/virtual.yaml -v
 # Virtual PCB (native_sim + DAC models as separate processes):
 pytest test_adc.py --config=configs/vpcb.yaml -v
 
-# Physical hardware (Nucleo + DAC loopback rig):
+# Physical hardware (Nucleo + DAC loopback rig). About two minutes; the
+# voltage sweep writes a CSV and an SVG plot to results/:
 pytest test_adc.py --config=configs/physical.yaml -v
 
 # The virtual twin of the one-breakout bench rig (needs the one-DAC build,
@@ -203,6 +204,9 @@ Follow-along tutorials with copy-pasteable commands and real captured output:
 - [Fix it layer by layer](walkthroughs/03-fix-it-layer-by-layer.md) — go back
   to before the fix and apply it one commit at a time, with the file, the code
   and the output at every step.
+- [Put it on real hardware](walkthroughs/04-real-hardware.md) — wire up a real
+  NUCLEO-H723ZG and DAC, and find the ADC bug the virtual board couldn't see:
+  every channel at once, a 129-step sweep with a plot, and a one-line fix.
 
 ## More Documentation
 
