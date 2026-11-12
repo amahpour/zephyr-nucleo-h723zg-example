@@ -58,11 +58,38 @@ jobs:
           west packages pip --install
           west zephyr-export
       
-      - name: Install SDK (always fresh - binaries have hardcoded paths)
+      # The SDK version is whatever the pinned Zephyr asks for.
+      - name: Read SDK version
+        id: sdk
+        run: echo "version=$(cat ~/zephyrproject/zephyr/SDK_VERSION)" >> "$GITHUB_OUTPUT"
+
+      # The SDK's binaries have hardcoded paths, which is fine here: every
+      # runner's home is /home/runner, so the cache restores to the same place.
+      # Keyed on the version and the toolchains, so a Zephyr bump that moves
+      # the SDK downloads a fresh one.
+      - name: Cache Zephyr SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ~/zephyr-sdk-${{ steps.sdk.outputs.version }}
+          key: zephyr-sdk-${{ runner.os }}-${{ steps.sdk.outputs.version }}-x86_64-arm
+
+      # Only on a miss. The token is for GitHub's release API, which refuses
+      # unauthenticated requests once a shared runner IP hits 60 an hour.
+      - name: Install SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
           source ~/zephyrproject/.venv/bin/activate
           cd ~/zephyrproject/zephyr
-          west sdk install -t x86_64-zephyr-elf arm-zephyr-eabi
+          west sdk install --personal-access-token "${{ secrets.GITHUB_TOKEN }}" \
+            --install-dir ~/zephyr-sdk-${{ steps.sdk.outputs.version }} \
+            -t x86_64-zephyr-elf arm-zephyr-eabi
+
+      # The cache brings back the files but not CMake's record of where the SDK
+      # is, which lives in ~/.cmake. Registering it again needs no network.
+      - name: Register cached SDK with CMake
+        if: steps.cache-sdk.outputs.cache-hit == 'true'
+        run: ~/zephyr-sdk-${{ steps.sdk.outputs.version }}/setup.sh -c
       
       # ==================== UNIT TESTS ====================
       - name: Run unit tests (ztest)
