@@ -205,8 +205,8 @@ Follow-along tutorials with copy-pasteable commands and real captured output:
   to before the fix and apply it one commit at a time, with the file, the code
   and the output at every step.
 - [Put it on real hardware](walkthroughs/04-real-hardware.md) — wire up a real
-  NUCLEO-H723ZG and DAC, and find the ADC bug the virtual board couldn't see:
-  every channel at once, a 129-step sweep with a plot, and a one-line fix.
+  NUCLEO-H723ZG and DAC, then cut a wire and pull a chip on copper, and fix the
+  two places the virtual board and the real one disagree.
 
 ## More Documentation
 

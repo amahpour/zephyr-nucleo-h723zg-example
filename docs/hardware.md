@@ -308,8 +308,8 @@ bench run found a bug the virtual board passed at every step: the ADC was set to
 the shortest sampling window it has, too short for its sampling capacitor to
 charge through the pin. A4 read 214 mV low at 3.2 V, the other inputs on ADC3
 sagged the same way, and the ADC1 inputs read high. The fix is one line in
-`app/targets/hw/adc_backend.c`, a file the virtual board never builds.
-[Walkthrough 4](../walkthroughs/04-real-hardware.md) finds and fixes it.
+`app/targets/hw/adc_backend.c`, a file the virtual board never builds
+(commit `227509d`).
 
 It goes the other way too. On the virtual board a cut wire reads `---`, because
 the board knows the net is undriven. On the bench, a cut wire leaves the pin
@@ -508,8 +508,7 @@ PYTHONPATH=tests/integration pytest tests/integration/ \
 **Retired 2026-09. Not used by any config.** Kept for reference, because it is
 why `PHYSICAL_TOLERANCE` in `tests/integration/test_adc.py` was 150 mV, and why
 `test_channel_isolation` only drove one channel at a time. Both changed once the
-DAC rig ran on the bench: see
-[walkthrough 4](../walkthroughs/04-real-hardware.md).
+DAC rig ran on the bench (commits `8404a4c` and `43d6afa`).
 
 The original rig fanned a single bench-supply output through a 16:1 analog
 multiplexer. That meant **only one channel could ever be driven at a time**, and
