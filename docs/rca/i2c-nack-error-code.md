@@ -1,7 +1,7 @@
 # RCA: the virtual board said `-19`, the real board says `-5`
 
 **Found:** 2026-10-25, on the first bench run
-([walkthrough 4](../../walkthroughs/04-real-hardware.md), step 9).
+([walkthrough 4](../../walkthroughs/04-real-hardware.md), step 4).
 **Fixed:** the same day. The virtual board now returns `-5`, like the real one.
 
 ## What happened
@@ -112,7 +112,7 @@ mis-strapped breakout would confirm it.
 
 - Videos already published show `-19`. That was the code at the time.
 - Tags such as `before-fault-model` and `before-sda-pull` show `-19` where it
-  was. Walkthrough 3 replays from the first, walkthrough 4 step 9 from the
+  was. Walkthrough 3 replays from the first, walkthrough 4 from the
   second.
 - Walkthrough 3's own `-19` lines are a different path (reading a net the
   virtual board doesn't know), which has no real-hardware counterpart and is
@@ -154,7 +154,7 @@ the same return codes, and readings that mean the same thing. It may *log* more,
 because it can see more. The one documented exception is a floating pin: the
 virtual board knows a net is undriven and a real ADC can't, so a cut wire reads
 `---` there and a number on copper. That one isn't hidden; it's tested for, by
-checking a channel follows its DAC ([walkthrough 4](../../walkthroughs/04-real-hardware.md), step 8).
+checking a channel follows its DAC ([walkthrough 4](../../walkthroughs/04-real-hardware.md), step 3).
 
 ## Lesson
 
