@@ -141,13 +141,18 @@ The DAC can drive all eight channels at once. Time to ask better questions.
 
 ---
 
-## Step 4 — Ask the real isolation question
+## Step 4 — Ask better questions
+
+Add both new tests:
 
 ```bash
-git cherry-pick 8404a4c
+git cherry-pick 8404a4c 068d642
 ```
 
-**`tests/integration/test_adc.py`** — lines 236–248
+**The isolation test** now sets every channel to a **different** voltage, all at
+the same time, and checks each one against its own.
+
+**`tests/integration/test_adc.py`** — lines 265–277
 
 ```python
         expected = isolation_levels(num_test_channels, rotation)
@@ -165,25 +170,32 @@ git cherry-pick 8404a4c
                 wrong.append(f"ch[{ch}]={actual}mV, expected ~{mv}mV")
 ```
 
-Every channel at a **different** voltage, all at the same time, each one
-checked against its own. That's the chord the old rig could never play.
+With every channel on its own voltage, two swapped or shorted wires can't both
+read right. Each of the eight rounds shifts the pattern by one step, so by the
+end every channel has held every voltage.
 
-The voltages are spread from 300 mV to 3 V, and neighbouring channels sit
-several steps apart, so two channels shorted together can't both read right:
+**The sweep** used to try six voltages on channel 0. Now it drives all eight
+channels together, from 50 mV to 3.25 V in 25 mV steps: 129 steps, over a
+thousand readings.
 
-**`tests/integration/test_adc.py`** — lines 135–140
+**`tests/integration/test_adc.py`** — lines 221–229
 
 ```python
-    step = (ISOLATION_HIGH_MV - ISOLATION_LOW_MV) / max(n - 1, 1)
-    levels = [ISOLATION_LOW_MV + round(i * step) for i in range(n)]
-
-    # The largest stride under n/2 that still visits every level once
-    stride = next(s for s in range(max(n // 2, 1), 0, -1) if math.gcd(s, n) == 1)
-    return {ch: levels[(ch * stride + rotation) % n] for ch in range(n)}
+        channels = range(num_test_channels)
+        rows = []
+        for set_mv in SWEEP_MV:
+            for ch in channels:
+                instrument.enable_output(ch, True)
+                instrument.set_voltage(ch, set_mv)
+            wait_for_fresh_sample(dut)
+            response = dut.send_command("adcregs")
+            rows.append((set_mv, {ch: parse_channel_value(response, ch) for ch in channels}))
 ```
 
-Each of the eight test cases shifts the pattern by one step, so by the end
-every channel has held every voltage.
+It writes the readings to `tests/integration/results/` as a CSV file, and plots
+how far each one is from what the DAC was told to drive.
+
+Run the isolation test:
 
 ```bash
 PYTHONPATH=tests/integration pytest tests/integration/test_adc.py --config=tests/integration/configs/physical.yaml -v -k isolation
@@ -200,39 +212,10 @@ tests/integration/test_adc.py::TestADCIsolation::test_channel_isolation[6] PASSE
 tests/integration/test_adc.py::TestADCIsolation::test_channel_isolation[7] PASSED
 ```
 
-Eight channels, eight voltages, all at once, all correct. Is it a test that can
-fail? On the virtual board, swap two wires in the netlist and every rotation
-fails. It can.
+All eight pass. Keep this test in mind: once the tolerance is tightened it
+catches the bug below (Step 7), and later a cut wire (Step 8).
 
----
-
-## Step 5 — Sweep every channel
-
-The old sweep tried six voltages on one channel. Try all of them, on every
-channel:
-
-```bash
-git cherry-pick 068d642
-```
-
-**`tests/integration/test_adc.py`** — lines 221–229
-
-```python
-        channels = range(num_test_channels)
-        rows = []
-        for set_mv in SWEEP_MV:
-            for ch in channels:
-                instrument.enable_output(ch, True)
-                instrument.set_voltage(ch, set_mv)
-            wait_for_fresh_sample(dut)
-            response = dut.send_command("adcregs")
-            rows.append((set_mv, {ch: parse_channel_value(response, ch) for ch in channels}))
-```
-
-All eight channels together, from 50 mV to 3.25 V in 25 mV steps: 129 steps,
-over a thousand readings. The test writes them to `tests/integration/results/`
-as a CSV file, and plots how far each reading is from what the DAC was told to
-drive.
+Now the sweep:
 
 ```bash
 PYTHONPATH=tests/integration pytest tests/integration/test_adc.py --config=tests/integration/configs/physical.yaml -v -s -k sweep
@@ -251,7 +234,7 @@ Worst error per channel over 129 steps (tolerance 150 mV):
 PASSED
 ```
 
-It passes. Now open the plot,
+Both pass. Now open the plot,
 `tests/integration/results/voltage_sweep-physical.svg`:
 
 ![Sweep before the fix: three channels sag as the voltage rises](images/04-sweep-before.svg)
@@ -298,7 +281,7 @@ pin connects to which, and what voltage each chip drives. It doesn't model how
 
 ---
 
-## Step 6 — Find the cause
+## Step 5 — Find the cause
 
 An ADC doesn't measure a pin directly. Before each conversion it connects a tiny
 capacitor to the pin, waits for it to charge to the pin's voltage, then
@@ -336,7 +319,7 @@ knowing before you trust a measurement made with a probe on the pin.
 
 ---
 
-## Step 7 — The fix
+## Step 6 — The fix
 
 ```bash
 git cherry-pick 227509d
@@ -393,7 +376,7 @@ correct, so this isn't the sampling bug; it's that one pin picking up noise.
 
 ---
 
-## Step 8 — Tighten the tolerance
+## Step 7 — Tighten the tolerance
 
 150 mV was for a switch that's gone, and it was wide enough to let a 119 mV bug
 pass. The bench has now shown what this rig can really do.
@@ -440,16 +423,17 @@ E       AssertionError: out of tolerance (50 mV): ch[4] -120 mV at 3200 mV; ch[5
 ```
 
 Nine failures — the single-channel check on A4, the sweep, and seven of the
-eight isolation rotations. The tests from Step 3 passed this exact firmware.
+eight isolation rotations from Step 4. The tests from Step 3 passed this exact
+firmware.
 
 Same test names as Step 3. Completely different questions.
 
 ---
 
-## Step 9 — Cut a wire
+## Step 8 — Cut a wire
 
 **Starting here?** The tag `before-sda-pull` is the repository at the end of
-step 8: the sampling fix and the 50 mV tolerance are in, the virtual board
+step 7: the sampling fix and the 50 mV tolerance are in, the virtual board
 still returns `-19`, and nothing checks that the DAC is answering. Set up the
 shell as in step 2, then make your branch from it and build and flash:
 
@@ -504,7 +488,7 @@ to 2800 mV:
 
 Channels 4 and 6 follow. Channel 5 creeps up a little when its neighbours are
 high, but nowhere near 2.8 V. A connected input follows the DAC; a cut one
-doesn't. That's exactly what the isolation test and the sweep check, on every
+doesn't. That's exactly what Step 4's isolation test and sweep check, on every
 channel:
 
 ```bash
@@ -542,7 +526,7 @@ Plug A5 back in.
 
 ---
 
-## Step 10 — Pull SDA
+## Step 9 — Pull SDA
 
 Walkthrough 1's other fault was a chip that stops answering. On the bench, set
 channel 0 to 2000 mV, pull the DAC's **SDA** wire at the Nucleo end (D14, CN7
@@ -658,7 +642,7 @@ I: dacx578@4c answering again
 
 The virtual board now does exactly the same, for the same reason: the same
 firmware check gets the same I²C answer. The one thing that still differs is a
-floating pin (Step 9), and that you test for.
+floating pin (Step 8), and that you test for.
 
 That's the loop this whole series runs on. Build and test on the virtual board.
 Run the same tests on the real one. Where they disagree, find out which one is
