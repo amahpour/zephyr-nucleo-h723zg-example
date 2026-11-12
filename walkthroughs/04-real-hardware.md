@@ -254,40 +254,8 @@ Fix both:
 git cherry-pick f6557a7 404c49d 31cbc80 90f9985 37d7b89
 ```
 
-The first makes the virtual board return `-5`, like the real driver. The
-second teaches the DAC model to treat a lone command byte as a read-back, the
-way the chip does. The third is the firmware change: every sample cycle, it
-reads back a register from each DAC, and a DAC that doesn't answer has its
-channels marked "no reading". The last two keep the logs quiet.
-
-**`app/src/dac_health.c`** — lines 41–62
-
-```c
-	for (size_t i = 0; i < ARRAY_SIZE(parts); i++) {
-		struct dac_part *p = &parts[i];
-		int ret = dacx578_check(p->dev);
-		bool now = (ret == 0);
-
-		/* Once per change of state, not ten times a second. */
-		if (now != p->answering) {
-			if (now) {
-				LOG_INF("%s answering again", p->dev->name);
-			} else {
-				LOG_WRN("%s not answering (%d) - its channels read ---",
-					p->dev->name, ret);
-			}
-			p->answering = now;
-		}
-
-		if (!now) {
-			for (unsigned int ch = p->first_ch;
-			     ch < p->first_ch + DAC_CH_PER_PART && ch < NUM_CH; ch++) {
-				valid[ch] = false;
-			}
-		}
-```
-
-Plug SDA back in, then rebuild and flash:
+Step 5 reads what they change. First, see them work. Plug SDA back in, then
+rebuild and flash:
 
 ```bash
 west build -d build-hw && west flash -d build-hw --runner openocd
@@ -334,6 +302,148 @@ I: dacx578@4c answering again
     ch[0]: 1008 mV
     ch[1]: 1000 mV
 ```
+
+---
+
+## Step 5 — Read the fix
+
+Five commits went in at Step 4:
+
+```bash
+git log --reverse --format=%s -5
+```
+
+```
+fix(vpcb): report an unanswered I2C write as -5, like the real driver
+fix(vpcb): a DAC7578 command byte on its own selects a read-back
+feat: a DAC that stops answering marks its channels ---, on both boards
+fix(vpcb): log an I2C fault when it starts, not on every transfer
+vpcb: log register read-backs only with -v
+```
+
+They hold two separate fixes, one for each disagreement. The first commit
+fixes the error code. The third gives you the dashes. The rest support those
+two.
+
+### The error code: the virtual board now says `-5`
+
+**`app/drivers/i2c_vpcb.c`** — lines 171–186
+
+```c
+	/*
+	 * Every bus failure returns -EIO, because that is what the real driver
+	 * returns. Zephyr's I2C API promises only -EIO for a failed transfer,
+	 * and the STM32 driver (drivers/i2c/i2c_stm32_v2.c) folds a NACK, lost
+	 * arbitration and a timeout into it. This driver used to return -ENODEV
+	 * for a NACK, on the untested assumption that a real bus would; the
+	 * first bench run read -5 (docs/rca/i2c-nack-error-code.md).
+	 *
+	 * The log line still says which failure it was. The virtual board may
+	 * say more than the real one, but it must not return something else.
+	 */
+	if (kind == XFER_OK) {
+		LOG_DBG("xfer addr=0x%02x wlen=%u rlen=%u OK", addr, wlen, rlen);
+		return 0;
+	}
+	return -EIO;
+```
+
+This file is the virtual board's I²C driver. It isn't built for the real
+board at all, so this fix changes nothing on the bench. The real driver said
+`-5` all along. `-EIO` is `-5`: a general I/O error, the code the real driver
+gives for a missing acknowledge and for every other bus failure.
+
+`dacset` prints its hint from the same code, so both boards now say the same
+thing:
+
+**`app/src/cmd_dac.c`** — lines 118–121
+
+```c
+		shell_error(sh,
+			    "dacset ch%u: write to %s FAILED (%d)%s",
+			    ch, dev->name, ret,
+			    ret == -EIO ? " - nothing answered on the bus" : "");
+```
+
+### The dashes: the firmware asks whether the DAC is still there
+
+Every sample cycle, after the ADC is read and before the readings are stored,
+the firmware checks the DACs:
+
+**`app/src/main.c`** — lines 46–50
+
+```c
+    while (1) {
+        ret = adc_backend_sample_all(samples, valid);
+        if (ret == 0) {
+            dac_health_apply(valid);
+            regs_update(samples, valid);
+```
+
+The check reads back one register from the chip:
+
+**`app/drivers/dac_dacx578.c`** — lines 92–104
+
+```c
+int dacx578_check(const struct device *dev)
+{
+	const struct dacx578_config *config = dev->config;
+	/* Read back channel 0's DAC register: the command byte, then a repeated
+	 * start and two data bytes (datasheet, Table 6 and the read sequences).
+	 * Nothing is written - a command only takes effect after a full data
+	 * byte pair - so this changes no output.
+	 */
+	uint8_t ca = DACX578_CMD_UPDATE_DAC << 4;
+	uint8_t data[2];
+
+	return i2c_write_read_dt(&config->bus, &ca, 1, data, sizeof(data));
+}
+```
+
+A read-back changes no output. The second commit teaches the virtual board's
+DAC model the same rule, so the check is harmless on both boards.
+
+Then each DAC that doesn't answer has its channels marked "no reading":
+
+**`app/src/dac_health.c`** — lines 41–62
+
+```c
+	for (size_t i = 0; i < ARRAY_SIZE(parts); i++) {
+		struct dac_part *p = &parts[i];
+		int ret = dacx578_check(p->dev);
+		bool now = (ret == 0);
+
+		/* Once per change of state, not ten times a second. */
+		if (now != p->answering) {
+			if (now) {
+				LOG_INF("%s answering again", p->dev->name);
+			} else {
+				LOG_WRN("%s not answering (%d) - its channels read ---",
+					p->dev->name, ret);
+			}
+			p->answering = now;
+		}
+
+		if (!now) {
+			for (unsigned int ch = p->first_ch;
+			     ch < p->first_ch + DAC_CH_PER_PART && ch < NUM_CH; ch++) {
+				valid[ch] = false;
+			}
+		}
+```
+
+Look at `bool now = (ret == 0);`. Any failure counts: `-5`, `-19`, anything.
+The error code has nothing to do with the dashes. The real board said `-5`
+before this fix and after it. What changed is that the firmware now asks.
+
+The loop marks only the channels a DAC drives, from `first_ch` for eight
+channels: 0 to 7 on this rig. Channels 8 to 14 have no DAC, so this fix doesn't
+touch them. They're unwired, floating pins like A5 in Step 3, and they keep
+reading numbers whether SDA is in or out.
+
+From there it's [Walkthrough 3](03-fix-it-layer-by-layer.md)'s path: a channel
+with no reading prints `---` in `adcregs`. The last two commits keep the logs
+quiet, now that something talks to every DAC ten times a second.
 
 The virtual board now does exactly the same, for the same reason: the same
 firmware check gets the same I²C answer. The one thing that still differs is a
